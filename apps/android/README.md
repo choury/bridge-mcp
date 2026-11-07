@@ -8,8 +8,8 @@ bridge-mcp 的 Android provider：手机作为 client 连入 [bridge-mcp](../bri
 
 | 工具 | 说明 |
 |---|---|
-| `phone.location.get {max_age_ms?}` | 单次定位；`max_age_ms` 内的缓存位置直接复用，否则等下一个 fix（30s 超时）。agent 调用时 app 在后台，需授予「始终允许」（`ACCESS_BACKGROUND_LOCATION`）——FGS location 类型与开机自启冲突（Android 14 禁止后台启动），故不走该路 |
-| `phone.file.list {path}` | 列举共享存储目录（name/type/size/mtime） |
+| `phone.location.get {max_age_ms?}` | 单次定位；`max_age_ms` 内的缓存位置直接复用，否则等下一个 fix（30s 超时）；室内拿不到 fix 时回退 lastKnown 最新值（`cached: true`，`age_ms` 标注新鲜度）。agent 调用时 app 在后台，需授予「始终允许」（`ACCESS_BACKGROUND_LOCATION`）——FGS location 类型与开机自启冲突（Android 14 禁止后台启动），故不走该路 |
+| `phone.file.op {action, path, to?, recursive?}` | 共享存储文件操作：`list`（列目录，name/type/size/mtime）、`stat`（存在/类型/大小/mtime）、`mkdir`（已存在不算错；`recursive: true` 连父目录一起建）、`rename`、`rm`（`recursive: true` 删目录树） |
 | `phone.file.push {path, content}` / `phone.file.pull {path, limit?}` | 由 bridge 依据 hidden 的 chunk 原语合成，纯文本读写 |
 | `bridge.push / bridge.pull` | 二进制文件搬运，内容不过模型、无大小上限（4MiB 分块走 hidden 原语） |
 | `phone.notification.post {id?, title, body, silent?}` / `phone.notification.cancel {id}` | agent → 手机方向发/撤本地通知 |

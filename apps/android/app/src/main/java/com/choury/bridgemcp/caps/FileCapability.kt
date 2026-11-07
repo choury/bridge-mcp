@@ -15,19 +15,22 @@ import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
 
-// 文件能力：file.list + 分块原语（hidden）。bridge 依据 chunk 原语自动合成
+// 文件能力：file.op（list/stat/rename/rm）+ 分块原语（hidden）。bridge 依据 chunk 原语自动合成
 // file.push / file.pull，静态 bridge.push / bridge.pull 也可用。
 // 范围：授予「所有文件访问」后为整个共享存储；未授予时直接报错指引。
 object FileCapability {
 
     private const val READ_CHUNK_MAX = 8L shl 20
 
-    private val LIST_SCHEMA = """{
+    private val OP_SCHEMA = """{
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "directory to list"}
+            "action": {"type": "string", "enum": ["list", "stat", "mkdir", "rename", "rm"], "description": "list: list a directory; stat: file or dir info; mkdir: create a directory (no error if it already exists, parents created only with recursive); rename: move within shared storage; rm: delete"},
+            "path": {"type": "string", "description": "target path; for rename this is the source"},
+            "to": {"type": "string", "description": "destination path, required for rename"},
+            "recursive": {"type": "boolean", "default": false, "description": "rm: delete a directory tree instead of just files and empty dirs; mkdir: also create missing parent directories"}
         },
-        "required": ["path"]
+        "required": ["action", "path"]
     }"""
 
     private val WRITE_CHUNK_SCHEMA = """{
@@ -52,11 +55,11 @@ object FileCapability {
     fun register(add: (Capability, CapHandler) -> Unit) {
         add(
             Capability(
-                name = "file.list",
-                description = "List one directory on this phone's shared storage. Returns entries with name, type (file|dir), size, mtime.",
-                inputSchema = LIST_SCHEMA,
+                name = "file.op",
+                description = "File operations on this phone's shared storage: list (list a directory), stat (existence/type/size/mtime), mkdir (create a directory), rename (move), rm (delete).",
+                inputSchema = OP_SCHEMA,
             ),
-            { args, _ -> list(args) },
+            { args, _ -> op(args) },
         )
         add(
             Capability(
@@ -91,10 +94,22 @@ object FileCapability {
         }
     }
 
-    private fun list(args: JSONObject): CapResult {
+    private fun op(args: JSONObject): CapResult {
         requireStorageAccess()
         val path = args.optString("path")
         if (path.isBlank()) throw IOException("path must not be empty")
+        return when (val action = args.optString("action")) {
+            "list" -> list(args)
+            "stat" -> stat(args)
+            "mkdir" -> mkdir(args)
+            "rename" -> rename(args)
+            "rm" -> rm(args)
+            else -> throw IOException("invalid action \"$action\"; expected list|stat|mkdir|rename|rm")
+        }
+    }
+
+    private fun list(args: JSONObject): CapResult {
+        val path = args.optString("path")
         val dir = File(path)
         if (!dir.isDirectory) throw IOException("$path is not a directory")
         val entries = JSONArray()
@@ -110,6 +125,49 @@ object FileCapability {
         return CapResult.Json(
             JSONObject().put("path", path).put("count", entries.length()).put("entries", entries)
         )
+    }
+
+    private fun stat(args: JSONObject): CapResult {
+        val path = args.optString("path")
+        val file = File(path)
+        if (!file.exists()) {
+            return CapResult.Json(JSONObject().put("path", path).put("exists", false))
+        }
+        return CapResult.Json(
+            JSONObject()
+                .put("path", path)
+                .put("exists", true)
+                .put("type", if (file.isDirectory) "dir" else "file")
+                .put("size", file.length())
+                .put("mtime", file.lastModified())
+        )
+    }
+
+    private fun mkdir(args: JSONObject): CapResult {
+        val path = args.optString("path")
+        val file = File(path)
+        val created = if (args.optBoolean("recursive", false)) file.mkdirs() else file.mkdir()
+        if (!file.isDirectory && !created) throw IOException("mkdir failed: $path")
+        return CapResult.Json(JSONObject().put("ok", true).put("path", path))
+    }
+
+    private fun rename(args: JSONObject): CapResult {
+        val path = args.optString("path")
+        val to = args.optString("to")
+        if (to.isBlank()) throw IOException("rename requires \"to\"")
+        if (!File(path).renameTo(File(to))) throw IOException("rename failed: $path -> $to")
+        return CapResult.Json(JSONObject().put("ok", true).put("path", path).put("to", to))
+    }
+
+    private fun rm(args: JSONObject): CapResult {
+        val path = args.optString("path")
+        val file = File(path)
+        if (args.optBoolean("recursive", false)) {
+            file.walkBottomUp().forEach { if (!it.delete()) throw IOException("rm failed: ${it.path}") }
+        } else if (!file.delete()) {
+            throw IOException("rm failed: $path")
+        }
+        return CapResult.Json(JSONObject().put("ok", true).put("path", path))
     }
 
     // 追加式契约与 Go provider 一致：offset 0 独占创建（已存在即报错）；

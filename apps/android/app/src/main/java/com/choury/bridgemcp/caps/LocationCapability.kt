@@ -21,7 +21,8 @@ import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
-// location.get：单次定位。max_age_ms 内的新鲜缓存位置直接返回，否则等下一个 fix（30s 超时）。
+// location.get：单次定位。max_age_ms 内的新鲜缓存位置直接返回，否则等下一个 fix（30s 超时）；
+// 超时（室内无 GPS 常态）回退到 lastKnown 里最新的一条，age_ms 供调用方判断新鲜度。
 object LocationCapability {
 
     private const val SCHEMA = """{
@@ -36,7 +37,7 @@ object LocationCapability {
         add(
             Capability(
                 name = "location.get",
-                description = "Get the current location of this phone. Returns latitude, longitude, accuracy_m, altitude_m, speed_mps, bearing_deg, time_ms.",
+                description = "Get the current location of this phone. Returns latitude, longitude, accuracy_m, altitude_m, speed_mps, bearing_deg, time_ms, age_ms, cached. If no live fix arrives within 30s (e.g. indoors), the last known location is returned instead (cached=true); check age_ms for staleness.",
                 inputSchema = SCHEMA,
             ),
             handler,
@@ -65,11 +66,9 @@ object LocationCapability {
         if (providers.isEmpty()) throw IOException("no enabled location provider")
 
         val maxAge = args.optLong("max_age_ms", 0)
+        val now = System.currentTimeMillis()
         if (maxAge > 0) {
-            val now = System.currentTimeMillis()
-            val fresh = providers.firstNotNullOfOrNull { provider ->
-                lm.getLastKnownLocation(provider)?.takeIf { now - it.time <= maxAge }
-            }
+            val fresh = bestLastKnown(lm, providers, now, maxAge)
             if (fresh != null) return CapResult.Json(locationJson(fresh, cached = true))
         }
 
@@ -88,10 +87,20 @@ object LocationCapability {
                 }
                 cont.invokeOnCancellation { detach() }
             }
-        } ?: throw IOException("no location fix within 30s")
+        }
+        if (fix != null) return CapResult.Json(locationJson(fix, cached = false))
 
-        return CapResult.Json(locationJson(fix, cached = false))
+        val stale = bestLastKnown(lm, providers, now, Long.MAX_VALUE)
+            ?: throw IOException("no location fix within 30s and no last known location")
+        return CapResult.Json(locationJson(stale, cached = true))
     }
+
+    // 各 provider（含 passive——其他 app 的定位常使它最新）的 lastKnown 中取最新一条
+    private fun bestLastKnown(lm: LocationManager, providers: List<String>, now: Long, maxAge: Long): Location? =
+        (providers + LocationManager.PASSIVE_PROVIDER)
+            .mapNotNull { lm.getLastKnownLocation(it) }
+            .filter { now - it.time <= maxAge }
+            .maxByOrNull { it.time }
 
     private fun inForeground(): Boolean {
         val am = BridgeApp.instance.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -108,5 +117,6 @@ object LocationCapability {
         .put("speed_mps", l.speed.toDouble())
         .put("bearing_deg", l.bearing.toDouble())
         .put("time_ms", l.time)
+        .put("age_ms", System.currentTimeMillis() - l.time)
         .put("cached", cached)
 }
