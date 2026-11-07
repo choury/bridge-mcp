@@ -2,7 +2,7 @@
 
 bridge-mcp 的 Android provider：手机作为 client 连入 [bridge-mcp](../bridge-mcp) 的 WebSocket 端点，把**定位、共享存储文件、通知、设备信息、截屏**暴露为 MCP 工具，agent 即可跨端调用。
 
-架构与 bridge-mcp 的 Go provider（`cmd/bridge-provider`）一致：前台服务持有 WebSocket 连接（OkHttp，30s ping 保活）；首次连接失败即报错停止、由用户修正后重试，上线后断线才按 1s→30s 指数退避重连（握手成功即重置）；开机自启（`BOOT_COMPLETED`）；调用按 bridge 侧 FIFO 串行处理。
+架构与 bridge-mcp 的 Go provider（`cmd/bridge-provider`）一致：前台服务持有 WebSocket 连接（OkHttp，120s ping 保活）；首次连接失败即报错停止、由用户修正后重试，上线后断线才按 1s→30s 指数退避重连（握手成功即重置，网络恢复即时打断退避）；开机自启（`BOOT_COMPLETED`）；调用按 bridge 侧 FIFO 串行处理。
 
 ## 能力面
 

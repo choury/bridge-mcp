@@ -31,5 +31,5 @@
     <string name="status_connecting">Connecting: %1$s</string>
     <string name="status_online">Online: %1$s</string>
     <string name="status_failed">Connect failed: %1$s</string>
-    <string name="status_reconnecting">Reconnecting in %1$ds</string>
+    <string name="status_reconnecting">Reconnecting in %1$ss</string>
 </resources>

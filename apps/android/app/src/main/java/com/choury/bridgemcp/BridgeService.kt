@@ -11,6 +11,10 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.media.projection.MediaProjection
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Handler
@@ -28,10 +32,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 // 连接状态广播：updateStatus 随每次状态迁移更新；文本经资源本地化（UI 徽章与常驻通知共用）。
 object BridgeStatus {
@@ -78,6 +83,8 @@ class BridgeService : Service() {
     private var connection: BridgeConnection? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var notifications: NotificationManager
+    private val reconnectSignal = Channel<Unit>(Channel.CONFLATED)
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -85,6 +92,7 @@ class BridgeService : Service() {
         super.onCreate()
         notifications = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         ensureChannels()
+        registerNetworkMonitor()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -102,7 +110,7 @@ class BridgeService : Service() {
             }
             ACTION_STOP_PROJECTION -> {
                 // 用户手动结束：停掉 projection（系统“正在录制”提示随之消失），
-                // FGS 退回纯 dataSync 类型
+                // FGS 退回连接保活类型
                 projection?.stop()
                 startForeground(withProjection = false)
                 LogBus.log("screen capture stopped")
@@ -117,6 +125,10 @@ class BridgeService : Service() {
         BridgeStatus.state.value = BridgeStatus.State(BridgeStatus.Kind.NOT_CONNECTED)
         bridgeJob?.cancel()
         connection?.shutdown()
+        networkCallback?.let {
+            (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+                .unregisterNetworkCallback(it)
+        }
         projection?.stop()
         projection = null
         scope.cancel()
@@ -149,16 +161,20 @@ class BridgeService : Service() {
             .setOnlyAlertOnce(true)
             .build()
 
-    // Android 14 要求在调用 getMediaProjection 前先以 mediaProjection 类型进入前台；
-    // dataSync 承载连接保活，两种类型同时声明。
+    // Android 14 要求在调用 getMediaProjection 前先以 mediaProjection 类型进入前台。
+    // 连接保活在 34+ 用 specialUse（dataSync 在 targetSdk 35+ 有 6h/24h 上限）；
+    // specialUse 自 API 34 引入，更低版本退回 dataSync。
     private fun startForeground(withProjection: Boolean) {
+        val keepAlive = when {
+            Build.VERSION.SDK_INT >= 34 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            else -> ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        }
+        val types = if (withProjection && Build.VERSION.SDK_INT >= 30) {
+            keepAlive or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        } else {
+            keepAlive
+        }
         if (Build.VERSION.SDK_INT >= 29) {
-            val types = if (withProjection && Build.VERSION.SDK_INT >= 30) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            } else {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            }
             startForeground(1, statusNotification(), types)
         } else {
             startForeground(1, statusNotification())
@@ -209,6 +225,25 @@ class BridgeService : Service() {
         return caps to handlers
     }
 
+    // NetworkRequest 默认排除 VPN；去掉该排除使 Tailscale 之类隧道的恢复也触发回调
+    private fun registerNetworkMonitor() {
+        val request = NetworkRequest.Builder()
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                reconnectSignal.trySend(Unit)
+            }
+        }
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            cm.registerNetworkCallback(request, callback)
+            networkCallback = callback
+        } catch (e: Exception) {
+            LogBus.log("network monitor unavailable: ${e.message}")
+        }
+    }
+
     private fun startBridgeLoop() {
         if (bridgeJob?.isActive == true) return
         bridgeJob = scope.launch {
@@ -252,7 +287,8 @@ class BridgeService : Service() {
                     }
                 }
                 updateStatus(BridgeStatus.State(BridgeStatus.Kind.RECONNECTING, "${backoff / 1000}"))
-                delay(backoff)
+                // 网络恢复（亮屏/VPN 上线）提前打断退避；无事件时等满 backoff
+                withTimeoutOrNull(backoff) { reconnectSignal.receive() }
                 backoff = (backoff * 2).coerceAtMost(30_000)
             }
         }
