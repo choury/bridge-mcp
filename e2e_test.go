@@ -68,7 +68,7 @@ func startBridge(t *testing.T) *harness {
 		wsPort:      freePort(t),
 		listChanged: make(chan struct{}, 32),
 	}
-	h.bridge = exec.Command("./bin/bridge", "-addr", "127.0.0.1:"+h.wsPort)
+	h.bridge = exec.Command("./bin/bridge-mcp", "-addr", "127.0.0.1:"+h.wsPort)
 	h.bridge.Stderr = os.Stderr
 	stdin, err := h.bridge.StdinPipe()
 	if err != nil {
@@ -107,7 +107,7 @@ func (h *harness) startProvider(id, note string) (*exec.Cmd, *lockedBuffer) {
 	if note != "" {
 		args = append(args, "--note", note)
 	}
-	p := exec.Command("./bin/provider", args...)
+	p := exec.Command("./bin/bridge-provider", args...)
 	errBuf := &lockedBuffer{}
 	p.Stderr, p.Stdout = errBuf, os.Stdout
 	if err := p.Start(); err != nil {
@@ -470,7 +470,7 @@ func TestBridgeStreamableHTTP(t *testing.T) {
 	port := freePort(t)
 	base := "http://127.0.0.1:" + port
 
-	bridge := exec.Command("./bin/bridge", "-addr", "127.0.0.1:"+port, "-mcp-http", "-token", "e2e-token")
+	bridge := exec.Command("./bin/bridge-mcp", "-addr", "127.0.0.1:"+port, "-mcp-http", "-token", "e2e-token")
 	bridge.Stderr = os.Stderr
 	if err := bridge.Start(); err != nil {
 		t.Fatal(err)
@@ -499,7 +499,7 @@ func TestBridgeStreamableHTTP(t *testing.T) {
 	}
 
 	// provider 连入
-	prov := exec.Command("./bin/provider", "--server", "ws://127.0.0.1:"+port+"/ws",
+	prov := exec.Command("./bin/bridge-provider", "--server", "ws://127.0.0.1:"+port+"/ws",
 		"--id", "devbox", "--note", "http 模式测试", "--token", "e2e-token")
 	prov.Stderr = os.Stderr
 	if err := prov.Start(); err != nil {

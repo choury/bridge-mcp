@@ -17,9 +17,22 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        System.getenv("APP_KEYSTORE")?.let { path ->
+            create("envKeystore") {
+                storeFile = file(path)
+                storePassword = System.getenv("APP_KEYSTORE_PASS")
+                keyAlias = System.getenv("APP_KEY_ALIAS")
+                keyPassword = System.getenv("APP_KEY_PASS")
+                    ?: System.getenv("APP_KEYSTORE_PASS")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("envKeystore")
         }
     }
 

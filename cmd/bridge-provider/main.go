@@ -47,12 +47,13 @@ type binOut struct {
 
 func main() {
 	server := flag.String("server", "ws://127.0.0.1:8765/ws", "bridge server WebSocket 地址")
-	id := flag.String("id", "", "client id，需匹配 ^[a-zA-Z0-9_-]{1,32}$")
+	id := flag.String("id", "", "client id，缺省用 hostname；需匹配 ^[a-zA-Z0-9_-]{1,32}$")
 	note := flag.String("note", "", "可选的自我介绍，展示给 agent（≤500 字符）")
 	token := flag.String("token", os.Getenv("BRIDGE_TOKEN"), "server 要求的 auth token")
 	flag.Parse()
 	if *id == "" {
-		log.Fatal("provider: --id is required")
+		*id, _ = os.Hostname()
+		log.Printf("provider: --id not given, using hostname %q", *id)
 	}
 
 	caps := []protocol.Capability{

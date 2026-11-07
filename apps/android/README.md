@@ -2,7 +2,7 @@
 
 bridge-mcp 的 Android provider：手机作为 client 连入 [bridge-mcp](../bridge-mcp) 的 WebSocket 端点，把**定位、共享存储文件、通知、设备信息、截屏**暴露为 MCP 工具，agent 即可跨端调用。
 
-架构与 bridge-mcp 的 Go provider（`cmd/provider`）一致：前台服务持有 WebSocket 连接（OkHttp，30s ping 保活）；首次连接失败即报错停止、由用户修正后重试，上线后断线才按 1s→30s 指数退避重连（握手成功即重置）；开机自启（`BOOT_COMPLETED`）；调用按 bridge 侧 FIFO 串行处理。
+架构与 bridge-mcp 的 Go provider（`cmd/bridge-provider`）一致：前台服务持有 WebSocket 连接（OkHttp，30s ping 保活）；首次连接失败即报错停止、由用户修正后重试，上线后断线才按 1s→30s 指数退避重连（握手成功即重置）；开机自启（`BOOT_COMPLETED`）；调用按 bridge 侧 FIFO 串行处理。
 
 ## 能力面
 
@@ -38,10 +38,12 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 要求 compileSdk 37（本仓库 SDK 37 以次版本 `android-37.0` 提供，构建脚本已用 `compileSdkMinor = 0` 声明）。
 
+release 打包：设置 `APP_KEYSTORE`（keystore 路径）即自动签名出 `app-release.apk`，配套 `APP_KEYSTORE_PASS` / `APP_KEY_ALIAS` / `APP_KEY_PASS`（key 密码缺省沿用 keystore 密码）；未设置则产出未签名包。
+
 App 内填写：服务器（如 `ws://10.0.2.2:18765/ws`，模拟器经 `10.0.2.2` 访问宿主机）、Client ID、Token，点「连接」。宿主机侧：
 
 ```bash
-../bridge-mcp/bin/bridge --addr :18765 --mcp-http --token <token>
+bin/bridge-mcp --addr :18765 --mcp-http --token <token>
 curl http://127.0.0.1:18765/healthz   # → ok
 ```
 
