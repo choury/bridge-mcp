@@ -235,32 +235,10 @@ func (cl *client) readLoop() {
 			if ch, ok := cl.pending.LoadAndDelete(res.ID); ok {
 				ch.(chan resultMsg) <- resultMsg{json: &res}
 			}
-		case protocol.TypePong:
-			// 应用层保活应答，无需处理
 		default:
 			log.Printf("ws: client %q sent unexpected %q; disconnecting", cl.info.ClientID, env.Type)
 			cl.kill()
 			return
-		}
-	}
-}
-
-func (cl *client) pinger() {
-	ticker := time.NewTicker(cl.reg.cfg.PingEvery)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-cl.dead:
-			return
-		case <-ticker.C:
-			pctx, cancel := context.WithTimeout(cl.ctx, cl.reg.cfg.PingEvery)
-			err := cl.conn.Ping(pctx)
-			cancel()
-			if err != nil {
-				log.Printf("ws: client %q ping failed: %v", cl.info.ClientID, err)
-				cl.kill()
-				return
-			}
 		}
 	}
 }

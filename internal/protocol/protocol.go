@@ -8,16 +8,14 @@ import (
 	"errors"
 )
 
-// 消息类型。server → client: welcome / error / call / ping；client → server: hello / result / pong。
+// 消息类型。server → client: welcome / error / call；client → server: hello / result。
 const (
 	TypeWelcome = "welcome"
 	TypeError   = "error"
 	TypeCall    = "call"
-	TypePing    = "ping"
 
 	TypeHello  = "hello"
 	TypeResult = "result"
-	TypePong   = "pong"
 )
 
 // 错误码。
@@ -79,16 +77,6 @@ type Result struct {
 	OK     bool            `json:"ok"`
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  string          `json:"error,omitempty"`
-}
-
-// Ping / Pong 应用层保活。WebSocket 协议层的 ping/pong 由各端库自动处理，
-// 这一对消息供不支持协议层保活的 client 实现使用。
-type Ping struct {
-	Type string `json:"type"`
-}
-
-type Pong struct {
-	Type string `json:"type"`
 }
 
 // 二进制帧：承载大块数据。

@@ -36,7 +36,6 @@ type Config struct {
 	CallTimeout time.Duration // 单次调用从入队到完成的整体超时
 	MaxBody     int           // 单条 WS 消息上限（字节），双方向都受此约束
 	HelloWait   time.Duration // 连入后等待 hello 的时限
-	PingEvery   time.Duration // 协议层保活间隔
 }
 
 func (c *Config) fillDefaults() {
@@ -48,9 +47,6 @@ func (c *Config) fillDefaults() {
 	}
 	if c.HelloWait <= 0 {
 		c.HelloWait = 10 * time.Second
-	}
-	if c.PingEvery <= 0 {
-		c.PingEvery = 30 * time.Second
 	}
 }
 
@@ -205,7 +201,6 @@ func (r *Registry) serveWS(w http.ResponseWriter, req *http.Request) {
 	}
 
 	go cl.worker()
-	go cl.pinger()
 	cl.readLoop()
 }
 

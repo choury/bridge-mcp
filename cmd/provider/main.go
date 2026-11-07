@@ -244,8 +244,6 @@ func runOnce(ctx context.Context, server string, hello protocol.Hello, handlers 
 			if err := handle(call, nil); err != nil {
 				return true, fmt.Errorf("send result: %w", err)
 			}
-		case protocol.TypePing:
-			_ = writeJSON(conn, baseCtx, protocol.Pong{Type: protocol.TypePong})
 		}
 	}
 }

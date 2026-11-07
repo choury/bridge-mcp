@@ -109,13 +109,11 @@ bin/provider --server ws://bridge-host:8765/ws --id devbox \
 ]}
 {"type":"result","id":"c1","ok":true,"result":{...}}
 {"type":"result","id":"c1","ok":false,"error":"..."}
-{"type":"pong"}
 
 // server → client
 {"type":"welcome","server_version":"1.0.0"}
 {"type":"error","code":"duplicate_client_id|bad_handshake|unauthorized","message":"..."}   // 随后断开
 {"type":"call","id":"c1","capability":"exec","arguments":{...}}
-{"type":"ping"}
 ```
 
 **二进制帧**：`[4字节大端 headerLen][header JSON][raw 数据]`，header 的 `type` 与文本消息同构：
@@ -132,7 +130,6 @@ client → server  header = {"type":"result","id":"c1","ok":true,"eof":true,"siz
 - `input_schema` 必须是 `type:"object"` 的 JSON Schema（缺失 type 时 server 补全；不合法的能力被跳过并记日志，不影响其余能力）
 - `hidden: true` 的能力不注册为模型工具，仅供 bridge 内部调用（分块原语即此用法）
 - 应答类型（JSON 或二进制）由能力自身决定；调用按 id 路由，id 每连接内单调递增
-- WebSocket 协议层 ping/pong 由各端库自动处理，应用层 ping/pong 供不支持协议层保活的实现使用
 
 ## 常驻部署（systemd user service）
 
