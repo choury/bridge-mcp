@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bridge MCP</string>
+    <string name="notif_channel_service">Connection status</string>
+    <string name="notif_channel_bridge">Bridge notifications</string>
+    <string name="notif_channel_bridge_silent">Bridge notifications (silent)</string>
+
+    <string name="title">Bridge MCP Provider</string>
+    <string name="server_label">Server</string>
+    <string name="client_id_label">Client ID</string>
+    <string name="note_label">Note (optional)</string>
+    <string name="token_label">Token (optional)</string>
+    <string name="action_connect">Connect</string>
+    <string name="action_stop">Stop</string>
+    <string name="section_permissions">Permissions</string>
+    <string name="section_logs">Logs</string>
+
+    <string name="perm_location">Location</string>
+    <string name="perm_bg_location">Background location (all the time)</string>
+    <string name="perm_notifications">Notifications</string>
+    <string name="perm_all_files">All files access</string>
+    <string name="perm_notif_listener">Notification access</string>
+    <string name="perm_projection">Screen capture (projection)</string>
+    <string name="perm_granted">Granted</string>
+    <string name="perm_authorize">Grant</string>
+    <string name="perm_revoke">Revoke</string>
+    <string name="perm_stop_projection">End capture</string>
+
+    <string name="status_not_connected">Not connected</string>
+    <string name="status_not_configured">Not configured</string>
+    <string name="status_connecting">Connecting: %1$s</string>
+    <string name="status_online">Online: %1$s</string>
+    <string name="status_failed">Connect failed: %1$s</string>
+    <string name="status_reconnecting">Reconnecting in %1$ds</string>
+</resources>

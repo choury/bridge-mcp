@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bridge MCP</string>
+    <string name="notif_channel_service">连接状态</string>
+    <string name="notif_channel_bridge">Bridge 通知</string>
+    <string name="notif_channel_bridge_silent">Bridge 通知（静默）</string>
+
+    <string name="title">Bridge MCP Provider</string>
+    <string name="server_label">服务器</string>
+    <string name="client_id_label">Client ID</string>
+    <string name="note_label">自我介绍（可选）</string>
+    <string name="token_label">Token（可选）</string>
+    <string name="action_connect">连接</string>
+    <string name="action_stop">停止</string>
+    <string name="section_permissions">权限</string>
+    <string name="section_logs">日志</string>
+
+    <string name="perm_location">定位</string>
+    <string name="perm_bg_location">后台定位（始终允许）</string>
+    <string name="perm_notifications">通知</string>
+    <string name="perm_all_files">所有文件</string>
+    <string name="perm_notif_listener">通知使用权</string>
+    <string name="perm_projection">投屏授权（截屏用）</string>
+    <string name="perm_granted">已授予</string>
+    <string name="perm_authorize">授权</string>
+    <string name="perm_revoke">撤销</string>
+    <string name="perm_stop_projection">结束投屏</string>
+
+    <string name="status_not_connected">未连接</string>
+    <string name="status_not_configured">未配置</string>
+    <string name="status_connecting">连接中：%1$s</string>
+    <string name="status_online">在线：%1$s</string>
+    <string name="status_failed">连接失败：%1$s</string>
+    <string name="status_reconnecting">重连中（%1$ds 后重试）</string>
+</resources>
