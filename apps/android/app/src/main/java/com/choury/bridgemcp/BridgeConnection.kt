@@ -6,6 +6,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import okhttp3.Credentials
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -29,6 +31,9 @@ class BridgeConnection(
 
     class ServerRejected(code: String, message: String) :
         IOException("server rejected: [$code] $message")
+
+    // WebSocket 握手被 HTTP 层拒绝（401/403/404/407/502…）：状态文案只留状态码，原始细节留在 cause
+    class HttpRejected(code: Int, cause: Throwable) : IOException("HTTP($code)", cause)
 
     private val client = OkHttpClient.Builder()
         .pingInterval(30, TimeUnit.SECONDS)
@@ -67,14 +72,22 @@ class BridgeConnection(
     }
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-        opened.completeExceptionally(t)
+        opened.completeExceptionally(
+            if (response != null && response.code != 101) HttpRejected(response.code, t) else t
+        )
         textMessages.close()
         binaryMessages.close()
     }
 
     // 阻塞至连接结束（断线/关闭/异常）；成功握手后回调 onWelcomed。
     suspend fun serve() {
-        val ws = client.newWebSocket(Request.Builder().url(serverUrl).build(), this)
+        // URL userinfo（https://user:pass@host/…）转 Basic 认证头
+        val url = serverUrl.toHttpUrl()
+        val request = Request.Builder().url(url)
+        if (url.username.isNotEmpty() || url.password.isNotEmpty()) {
+            request.header("Authorization", Credentials.basic(url.username, url.password))
+        }
+        val ws = client.newWebSocket(request.build(), this)
         this.ws = ws
         try {
             opened.await()

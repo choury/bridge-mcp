@@ -103,7 +103,7 @@ func (h *harness) teardown() {
 
 func (h *harness) startProvider(id, note string) (*exec.Cmd, *lockedBuffer) {
 	h.t.Helper()
-	args := []string{"--server", "ws://127.0.0.1:" + h.wsPort + "/ws", "--id", id}
+	args := []string{"--server", "http://127.0.0.1:" + h.wsPort + "/ws", "--id", id}
 	if note != "" {
 		args = append(args, "--note", note)
 	}
@@ -499,7 +499,7 @@ func TestBridgeStreamableHTTP(t *testing.T) {
 	}
 
 	// provider 连入
-	prov := exec.Command("./bin/bridge-provider", "--server", "ws://127.0.0.1:"+port+"/ws",
+	prov := exec.Command("./bin/bridge-provider", "--server", "http://127.0.0.1:"+port+"/ws",
 		"--id", "devbox", "--note", "http 模式测试", "--token", "e2e-token")
 	prov.Stderr = os.Stderr
 	if err := prov.Start(); err != nil {

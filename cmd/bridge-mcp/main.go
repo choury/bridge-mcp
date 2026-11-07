@@ -55,7 +55,7 @@ func main() {
 		if *token != "" {
 			auth = "bearer auth (--token)"
 		}
-		log.Printf("bridge: mcp endpoint http://%s/mcp (%s); provider endpoint ws://%s/ws", ln.Addr(), auth, ln.Addr())
+		log.Printf("bridge: mcp endpoint http://%s/mcp (%s); provider endpoint http://%s/ws", ln.Addr(), auth, ln.Addr())
 		// 常驻模式由服务管理器托管生命周期，等待信号退出
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -64,7 +64,7 @@ func main() {
 		return
 	}
 
-	log.Printf("bridge: provider endpoint ws://%s/ws  (health: http://%s/healthz)", ln.Addr(), ln.Addr())
+	log.Printf("bridge: provider endpoint http://%s/ws  (health: http://%s/healthz)", ln.Addr(), ln.Addr())
 
 	// stdout 承载 MCP stdio 协议，所有日志走 stderr（log 包默认）
 	runErr := srv.Run(ctx)

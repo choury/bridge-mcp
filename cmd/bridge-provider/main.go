@@ -5,12 +5,15 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -46,7 +49,7 @@ type binOut struct {
 }
 
 func main() {
-	server := flag.String("server", "ws://127.0.0.1:8765/ws", "bridge server WebSocket 地址")
+	server := flag.String("server", "http://127.0.0.1:8765/ws", "bridge server 地址")
 	id := flag.String("id", "", "client id，缺省用 hostname；需匹配 ^[a-zA-Z0-9_-]{1,32}$")
 	note := flag.String("note", "", "可选的自我介绍，展示给 agent（≤500 字符）")
 	token := flag.String("token", os.Getenv("BRIDGE_TOKEN"), "server 要求的 auth token")
@@ -154,8 +157,17 @@ func main() {
 
 // runOnce 完成一次连接生命周期；welcomed 表示握手成功（可用于重置退避）。
 func runOnce(ctx context.Context, server string, hello protocol.Hello, handlers map[string]capHandler) (welcomed bool, err error) {
+	// URL userinfo（http://user:pass@host/…）转 Basic 认证头，库不会自动使用 userinfo
+	opts := &websocket.DialOptions{}
+	if u, err := url.Parse(server); err == nil && u.User != nil {
+		pass, _ := u.User.Password()
+		creds := u.User.Username() + ":" + pass
+		opts.HTTPHeader = http.Header{
+			"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte(creds))},
+		}
+	}
 	dctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	conn, _, err := websocket.Dial(dctx, server, nil)
+	conn, _, err := websocket.Dial(dctx, server, opts)
 	cancel()
 	if err != nil {
 		return false, fmt.Errorf("dial %s: %w", server, err)

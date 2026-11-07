@@ -40,7 +40,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 release 打包：设置 `APP_KEYSTORE`（keystore 路径）即自动签名出 `app-release.apk`，配套 `APP_KEYSTORE_PASS` / `APP_KEY_ALIAS` / `APP_KEY_PASS`（key 密码缺省沿用 keystore 密码）；未设置则产出未签名包。
 
-App 内填写：服务器（如 `ws://10.0.2.2:18765/ws`，模拟器经 `10.0.2.2` 访问宿主机）、Client ID、Token，点「连接」。宿主机侧：
+App 内填写：服务器（如 `http://10.0.2.2:18765/ws`，模拟器经 `10.0.2.2` 访问宿主机）、Client ID、Token，点「连接」。宿主机侧：
 
 ```bash
 bin/bridge-mcp --addr :18765 --mcp-http --token <token>
@@ -50,7 +50,7 @@ curl http://127.0.0.1:18765/healthz   # → ok
 ## 安全提示
 
 - 界面随系统语言双语（`values/` 英文 + `values-zh/` 中文）；**MCP 报错与 App 内日志固定英文**，保证 agent 侧可稳定解析
-- `android:usesCleartextTraffic="true"`：局域网 ws 明文通信所需；跨不可信网络请套 TLS（wss）或隧道
+- `android:usesCleartextTraffic="true"`：局域网 http 明文通信所需；跨不可信网络请套 TLS（https）或隧道
 - `QUERY_ALL_PACKAGES`：`device.apps` 的 `includeNonLaunchable` 全量列表需要；仅侧载分发，不上 Google Play
 - `MANAGE_EXTERNAL_STORAGE`：文件能力面向整个共享存储，授予即代表信任接入的 agent
 - `--token` 仅做准入认证，语义与 bridge 一致

@@ -74,13 +74,16 @@ class MainActivity : ComponentActivity() {
         setContent { Screen() }
     }
 
+    private fun deviceName(): String =
+        Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME) ?: Build.MODEL
+
     @Composable
     private fun Screen() {
         val prefs = remember { BridgeService.prefs(this) }
         val scope = rememberCoroutineScope()
 
-        var server by remember { mutableStateOf(prefs.getString("server", "ws://10.0.2.2:8765/ws") ?: "") }
-        var clientId by remember { mutableStateOf(prefs.getString("client_id", "phone") ?: "") }
+        var server by remember { mutableStateOf(prefs.getString("server", "http://10.0.0.1:8765/ws") ?: "") }
+        var clientId by remember { mutableStateOf(prefs.getString("client_id", deviceName()) ?: "") }
         var note by remember { mutableStateOf(prefs.getString("note", "") ?: "") }
         var token by remember { mutableStateOf(prefs.getString("token", "") ?: "") }
         var logs by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -158,6 +161,8 @@ class MainActivity : ComponentActivity() {
         }
 
         Scaffold { padding ->
+            // refresh 只在 ON_RESUME/授权回调里自增；必须读一次它，从系统设置页返回时权限行才会重组
+            val refreshTick = refresh
             Column(
                 Modifier
                     .fillMaxSize()
@@ -167,12 +172,9 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        getString(R.string.title),
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatusChip(status)
+                    Text(getString(R.string.title), style = MaterialTheme.typography.titleLarge)
+                    // 徽章限宽换行：不加权重会先以整行测量，长文案吃掉标题宽度（标题零宽一字一行）
+                    StatusChip(status, Modifier.weight(1f, fill = false))
                 }
 
                 OutlinedTextField(
@@ -298,14 +300,14 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun StatusChip(status: BridgeStatus.State) {
+    private fun StatusChip(status: BridgeStatus.State, modifier: Modifier = Modifier) {
         val bg = when (status.kind) {
             BridgeStatus.Kind.ONLINE -> Color(0xFFC8E6C9)
             BridgeStatus.Kind.CONNECTING, BridgeStatus.Kind.RECONNECTING -> Color(0xFFFFECB3)
             BridgeStatus.Kind.FAILED -> Color(0xFFFFCDD2)
             else -> Color(0xFFE0E0E0)
         }
-        Surface(shape = RoundedCornerShape(10.dp), color = bg) {
+        Surface(modifier = modifier, shape = RoundedCornerShape(10.dp), color = bg) {
             Text(
                 BridgeStatus.text(this@MainActivity, status),
                 Modifier.padding(horizontal = 8.dp, vertical = 3.dp),

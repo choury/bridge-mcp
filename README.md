@@ -6,7 +6,7 @@ server 把这些能力动态暴露为 MCP 工具，agent即可跨机器调用。
 ```
 ┌────────┐  MCP (stdio 或    ┌─────────────┐  WebSocket（JSON + 二进制帧）  ┌───────────────┐
 │ Agent  │  HTTP /mcp)       │ bridge      │ <----------------------------> │ provider      │
-│        │ <---------------> │             │      ws://host:8765/ws         │               │
+│        │ <---------------> │             │   http(s)://host:8765/ws       │               │
 └────────┘                   └─────────────┘                                └───────────────┘
                              client 上线 → 注册工具                          声明能力并实际执行
                              client 下线 → 注销工具                          参考实现：exec + 读写分块原语
@@ -45,13 +45,13 @@ bin/bridge-mcp --addr :8765            # 或用环境变量 BRIDGE_ADDR 等
 **provider**（被控机器；参考实现 = exec + 两个分块原语）：
 
 ```bash
-bin/bridge-provider --server ws://bridge-host:8765/ws --id devbox \
+bin/bridge-provider --server http://bridge-host:8765/ws --id devbox \
   --note "办公室的 Debian 13 测试机" --token secret
 ```
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `--server` | `ws://127.0.0.1:8765/ws` | bridge 地址 |
+| `--server` | `http://127.0.0.1:8765/ws` | bridge 地址 |
 | `--id` | hostname | client id，`^[a-zA-Z0-9_-]{1,32}$` |
 | `--note` | 空 | 自我介绍（≤500 字符），agent 通过 `bridge.clients` 可见 |
 | `--token` | `$BRIDGE_TOKEN` | 与 bridge 一致的 token |
@@ -174,5 +174,5 @@ go test -tags e2e -v .
 
 ## 安全提示
 
-- `--token` 仅做准入认证；WS 上为明文 JSON 与二进制帧，跨不可信网络请套 TLS（反向代理 wss）或走隧道。
+- `--token` 仅做准入认证；WS 上为明文 JSON 与二进制帧，跨不可信网络请套 TLS（反向代理 https）或走隧道。
 - provider 参考实现对本机无任何路径/命令限制，只在与 bridge 相同信任域的机器上运行。
