@@ -9,6 +9,7 @@ android {
     // 本机 SDK 37 以次版本目录 android-37.0 提供（OkHttp 5.5 要求 compileSdk ≥ 37）
     compileSdkMinor = 0
 
+
     defaultConfig {
         applicationId = "com.choury.bridgemcp"
         minSdk = 26

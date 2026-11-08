@@ -5,11 +5,13 @@
     <string name="notif_channel_bridge">Bridge notifications</string>
     <string name="notif_channel_bridge_silent">Bridge notifications (silent)</string>
 
-    <string name="title">Bridge MCP Provider</string>
+    <string name="title">Connection settings</string>
     <string name="server_label">Server</string>
     <string name="client_id_label">Client ID</string>
     <string name="note_label">Note (optional)</string>
+    <string name="note_default">My Android phone</string>
     <string name="token_label">Token (optional)</string>
+    <string name="adb_port_label">ADB port (optional, enables exec)</string>
     <string name="action_connect">Connect</string>
     <string name="action_stop">Stop</string>
     <string name="section_permissions">Permissions</string>

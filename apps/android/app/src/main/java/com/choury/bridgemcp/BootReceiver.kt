@@ -11,7 +11,7 @@ class BootReceiver : BroadcastReceiver() {
             intent.action != Intent.ACTION_MY_PACKAGE_REPLACED
         ) return
         val p = BridgeService.prefs(context)
-        // 用户点过「停止」的意图跨重启保留：仅 enabled 标记为 true 时自动拉起
+        // enabled 在上线成功时置位、点「停止」时清除：从未成功连接或已停止的都不自动拉起
         if (p.getBoolean("enabled", false) &&
             !p.getString("server", "").isNullOrBlank() &&
             !p.getString("client_id", "").isNullOrBlank()

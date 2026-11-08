@@ -22,6 +22,7 @@ import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.choury.bridgemcp.caps.DeviceCapability
+import com.choury.bridgemcp.caps.ExecCapability
 import com.choury.bridgemcp.caps.FileCapability
 import com.choury.bridgemcp.caps.LocationCapability
 import com.choury.bridgemcp.caps.NotificationCapability
@@ -206,10 +207,11 @@ class BridgeService : Service() {
             p.getString("client_id", "") ?: "",
             p.getString("note", "") ?: "",
             p.getString("token", "") ?: "",
+            p.getString("adb_port", "") ?: "",
         )
     }
 
-    private fun buildRegistry(): Pair<List<Capability>, Map<String, CapHandler>> {
+    private fun buildRegistry(adbPort: Int?): Pair<List<Capability>, Map<String, CapHandler>> {
         val caps = mutableListOf<Capability>()
         val handlers = mutableMapOf<String, CapHandler>()
         fun add(cap: Capability, handler: CapHandler) {
@@ -222,6 +224,7 @@ class BridgeService : Service() {
         NotificationsListCapability.register(::add)
         DeviceCapability.register(::add)
         ScreenCapability.register(::add)
+        adbPort?.let { ExecCapability.register(::add, it) }
         return caps to handlers
     }
 
@@ -250,13 +253,36 @@ class BridgeService : Service() {
             var backoff = 1_000L
             var welcomed = false
             while (isActive) {
-                val (server, clientId, note, token) = readConfig()
+                val (server, clientId, note, token, adbPortRaw) = readConfig()
                 if (server.isBlank() || clientId.isBlank()) {
                     LogBus.log("missing server or client id; configure in the app and reconnect")
                     updateStatus(BridgeStatus.State(BridgeStatus.Kind.NOT_CONFIGURED))
                     return@launch
                 }
-                val (caps, handlers) = buildRegistry()
+                val adbPort = adbPortRaw.trim().toIntOrNull()
+                if (adbPortRaw.isNotBlank() && adbPort == null) {
+                    val failure = "invalid adb port \"$adbPortRaw\"; fix or clear it and reconnect"
+                    LogBus.log(failure)
+                    updateStatus(BridgeStatus.State(BridgeStatus.Kind.FAILED, failure))
+                    return@launch
+                }
+                // 状态先置 CONNECTING：adb 预握手期间界面有反馈
+                updateStatus(BridgeStatus.State(BridgeStatus.Kind.CONNECTING, server))
+                // 连 bridge 前先预授权 adb 连接：需要授权时弹窗当场出现在用户面前（勾选
+                // 「一律允许」后密钥经 framework 持久化，此后重连、重启都静默）。失败视为
+                // 配置错误，不连 bridge
+                if (adbPort != null) {
+                    try {
+                        ExecCapability.preAuthorize(adbPort)
+                        LogBus.log("adb ready (port $adbPort)")
+                    } catch (e: Exception) {
+                        // 状态徽章只留短语，细节进 App 内日志
+                        LogBus.log("adb handshake failed: ${e.message ?: e.toString()}; authorize in the device dialog, or fix/clear the adb port")
+                        updateStatus(BridgeStatus.State(BridgeStatus.Kind.FAILED, "adb handshake failed"))
+                        return@launch
+                    }
+                }
+                val (caps, handlers) = buildRegistry(adbPort)
                 val conn = BridgeConnection(
                     serverUrl = server,
                     helloMessage = Protocol.hello(clientId, note, token, caps),
@@ -264,6 +290,8 @@ class BridgeService : Service() {
                     onWelcomed = {
                         welcomed = true
                         backoff = 1_000
+                        // enabled 只在真正上线时置位：从未连接成功过的配置不该在更新/重启后被自动拉起
+                        prefs(this@BridgeService).edit().putBoolean("enabled", true).apply()
                         LogBus.log("registered as \"$clientId\" (${caps.size} capabilities)")
                         updateStatus(BridgeStatus.State(BridgeStatus.Kind.ONLINE, clientId))
                     },
@@ -271,7 +299,6 @@ class BridgeService : Service() {
                 )
                 connection = conn
                 val failure = try {
-                    updateStatus(BridgeStatus.State(BridgeStatus.Kind.CONNECTING, server))
                     conn.serve()
                     null
                 } catch (e: Exception) {

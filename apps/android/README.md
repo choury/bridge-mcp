@@ -12,6 +12,7 @@ bridge-mcp 的 Android provider：手机作为 client 连入 [bridge-mcp](../bri
 | `phone.file.op {action, path, to?, recursive?}` | 共享存储文件操作：`list`（列目录，name/type/size/mtime）、`stat`（存在/类型/大小/mtime）、`mkdir`（已存在不算错；`recursive: true` 连父目录一起建）、`rename`、`rm`（`recursive: true` 删目录树） |
 | `phone.file.push {path, content}` / `phone.file.pull {path, limit?}` | 由 bridge 依据 hidden 的 chunk 原语合成，纯文本读写 |
 | `bridge.push / bridge.pull` | 二进制文件搬运，内容不过模型、无大小上限（4MiB 分块走 hidden 原语） |
+| `phone.exec {command, timeout_ms?, tail?}` | 经本机 adbd 以 **shell uid** 执行命令；返回 `{exit_code, timed_out, stdout, stderr, truncated}`，stdout/stderr 各截 32KB（`tail: true` 保尾）。仅配置了 ADB 端口时注册；schema 对齐 Go provider 但无 `workdir` |
 | `phone.notification.post {id?, title, body, silent?}` / `phone.notification.cancel {id}` | agent → 手机方向发/撤本地通知 |
 | `phone.notifications.list` | 手机 → agent 方向：当前通知快照（key/package/title/text/post_time/ongoing/actions），对齐 OpenClaw |
 | `phone.notifications.actions {key, action, replyText?}` | 对指定通知 `open` / `dismiss` / `reply`（reply 经 RemoteInput 填充内联回复） |
@@ -47,6 +48,13 @@ bin/bridge-mcp --addr :18765 --mcp-http --token <token>
 curl http://127.0.0.1:18765/healthz   # → ok
 ```
 
+## exec 与 ADB 端口
+
+配置「ADB 端口」后，点连接会**先与本机 adbd 握手（`127.0.0.1:<端口>`）再连 bridge**：需要授权时设备上当场弹「允许 USB 调试？」，在握手超时（90s）内确认即完成授权并继续连接；
+
+- 端口来源：开发者选项「无线调试」显示的端口（每次开关会变），或 USB 连一次执行 `adb tcpip 5555`（重启前有效）；模拟器固定 `5555`
+- 执行身份是 adbd 的 shell uid（非 root），与 `adb shell` 等同
+
 ## 安全提示
 
 - 界面随系统语言双语（`values/` 英文 + `values-zh/` 中文）；**MCP 报错与 App 内日志固定英文**，保证 agent 侧可稳定解析
@@ -54,13 +62,3 @@ curl http://127.0.0.1:18765/healthz   # → ok
 - `QUERY_ALL_PACKAGES`：`device.apps` 的 `includeNonLaunchable` 全量列表需要；仅侧载分发，不上 Google Play
 - `MANAGE_EXTERNAL_STORAGE`：文件能力面向整个共享存储，授予即代表信任接入的 agent
 - `--token` 仅做准入认证，语义与 bridge 一致
-
-## 端到端验证记录（Medium_Phone_API_34 模拟器 + 本机 bridge --mcp-http）
-
-- 连入注册 14 项能力，`bridge.clients` 可见；`am force-stop` 后下线
-- `location.get`：`geo fix 116.397 39.917` 注入后返回精确坐标（±5m）
-- `notification.post` → 通知栏可见；`notifications.list` 读到该通知；`actions dismiss` 后消失
-- `file.push`（39B 中文文本）落盘 `/sdcard/Download`，`file.pull` 读回一致；`bridge.push/pull` 3MB 二进制 1.2s，md5 一致；对已存在文件 push 正确报错（独占创建契约）
-- `device.*` 五项返回合理数据（电池/热状态/存储/网络/内存/应用列表）
-- `screen.capture` 出 1080×2400 PNG，`bridge.pull` 拉回图像正确（内容即 app 界面）
-- 重启模拟器：`BOOT_COMPLETED` 自动拉起前台服务并重连上线

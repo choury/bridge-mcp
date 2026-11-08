@@ -5,11 +5,13 @@
     <string name="notif_channel_bridge">Bridge 通知</string>
     <string name="notif_channel_bridge_silent">Bridge 通知（静默）</string>
 
-    <string name="title">Bridge MCP Provider</string>
+    <string name="title">接入设置</string>
     <string name="server_label">服务器</string>
     <string name="client_id_label">Client ID</string>
     <string name="note_label">自我介绍（可选）</string>
+    <string name="note_default">我的安卓手机</string>
     <string name="token_label">Token（可选）</string>
+    <string name="adb_port_label">ADB 端口（可选，启用 exec）</string>
     <string name="action_connect">连接</string>
     <string name="action_stop">停止</string>
     <string name="section_permissions">权限</string>

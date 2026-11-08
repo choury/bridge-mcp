@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -46,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -84,8 +87,9 @@ class MainActivity : ComponentActivity() {
 
         var server by remember { mutableStateOf(prefs.getString("server", "http://10.0.0.1:8765/ws") ?: "") }
         var clientId by remember { mutableStateOf(prefs.getString("client_id", deviceName()) ?: "") }
-        var note by remember { mutableStateOf(prefs.getString("note", "") ?: "") }
+        var note by remember { mutableStateOf(prefs.getString("note", getString(R.string.note_default)) ?: "") }
         var token by remember { mutableStateOf(prefs.getString("token", "") ?: "") }
+        var adbPort by remember { mutableStateOf(prefs.getString("adb_port", "") ?: "") }
         var logs by remember { mutableStateOf<List<String>>(emptyList()) }
         DisposableEffect(Unit) {
             val job = scope.launch {
@@ -142,6 +146,7 @@ class MainActivity : ComponentActivity() {
                 .putString("client_id", clientId.trim())
                 .putString("note", note.trim())
                 .putString("token", token)
+                .putString("adb_port", adbPort.trim())
                 .apply()
         }
 
@@ -173,8 +178,8 @@ class MainActivity : ComponentActivity() {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(getString(R.string.title), style = MaterialTheme.typography.titleLarge)
-                    // 徽章限宽换行：不加权重会先以整行测量，长文案吃掉标题宽度（标题零宽一字一行）
-                    StatusChip(status, Modifier.weight(1f, fill = false))
+                    // 徽章限宽换行并靠右：不加权重会先以整行测量，长文案吃掉标题宽度（标题零宽一字一行）
+                    StatusChip(status, Modifier.weight(1f).wrapContentWidth(Alignment.End))
                 }
 
                 OutlinedTextField(
@@ -201,12 +206,18 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
                     readOnly = running,
                 )
+                OutlinedTextField(
+                    value = adbPort, onValueChange = { adbPort = it },
+                    label = { Text(getString(R.string.adb_port_label)) },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    readOnly = running,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(
                         onClick = {
                             save()
-                            prefs.edit().putBoolean("enabled", true).apply()
                             ContextCompat.startForegroundService(
                                 this@MainActivity,
                                 Intent(this@MainActivity, BridgeService::class.java)
