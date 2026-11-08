@@ -17,18 +17,20 @@ import (
 // client 一个已注册的 provider 连接。dispatch 队列 + 单 worker 保证同一 client
 // 的调用严格串行；不同 client 各自独立，天然并行。
 type client struct {
-	reg      *Registry
-	info     ClientInfo
-	conn     *websocket.Conn
-	ctx      context.Context
-	cancel   context.CancelFunc
-	dispatch chan *pendingCall
-	pending  sync.Map // call id → chan resultMsg
-	dead     chan struct{}
-	deadOnce sync.Once
-	booted   atomic.Bool
-	seq      atomic.Int64
-	writeMu  sync.Mutex
+	reg          *Registry
+	info         ClientInfo
+	conn         *websocket.Conn
+	ctx          context.Context
+	cancel       context.CancelFunc
+	lastActive   atomic.Int64 // 最近一次任一方向数据帧的时间，心跳据此判定空闲
+	dispatch     chan *pendingCall
+	pending      sync.Map // call id → chan resultMsg
+	pendingCount atomic.Int32
+	dead         chan struct{}
+	deadOnce     sync.Once
+	booted       atomic.Bool
+	seq          atomic.Int64
+	writeMu      sync.Mutex
 }
 
 // resultMsg 一次调用的应答：JSON 结果或二进制结果二选一。
@@ -145,7 +147,11 @@ func (cl *client) execOne(pc *pendingCall) {
 	id := fmt.Sprintf("c%d", cl.seq.Add(1))
 	ch := make(chan resultMsg, 1)
 	cl.pending.Store(id, ch)
-	defer cl.pending.Delete(id)
+	cl.pendingCount.Add(1)
+	defer func() {
+		cl.pending.Delete(id)
+		cl.pendingCount.Add(-1)
+	}()
 
 	var werr error
 	if pc.data != nil {
@@ -201,6 +207,7 @@ func (cl *client) readLoop() {
 			cl.kill()
 			return
 		}
+		cl.lastActive.Store(time.Now().UnixNano())
 		if len(data) > cl.reg.cfg.MaxBody {
 			log.Printf("ws: client %q sent %d bytes, exceeding limit %d; disconnecting", cl.info.ClientID, len(data), cl.reg.cfg.MaxBody)
 			cl.kill()
@@ -243,6 +250,38 @@ func (cl *client) readLoop() {
 	}
 }
 
+// heartbeat 空闲探活：连接静默达到 IdlePing 且无在途调用时 ping 一次，pong 在
+// PongWait 内未到即判死。半开连接（对端已死但 TCP 层无感，典型如设备重启、
+// NAT 静默丢弃）无法靠读循环发现，只能由服务端主动探测回收。
+func (cl *client) heartbeat() {
+	t := time.NewTicker(cl.reg.cfg.PongWait)
+	defer t.Stop()
+	for {
+		select {
+		case <-cl.dead:
+			return
+		case <-t.C:
+		}
+		if cl.pendingCount.Load() > 0 {
+			continue
+		}
+		idle := time.Since(time.Unix(0, cl.lastActive.Load()))
+		if idle < cl.reg.cfg.IdlePing {
+			continue
+		}
+		pctx, cancel := context.WithTimeout(cl.ctx, cl.reg.cfg.PongWait)
+		err := cl.conn.Ping(pctx)
+		cancel()
+		if err != nil {
+			log.Printf("ws: client %q idle %s with no pong within %s; disconnecting",
+				cl.info.ClientID, idle.Round(time.Second), cl.reg.cfg.PongWait)
+			cl.kill()
+			return
+		}
+		cl.lastActive.Store(time.Now().UnixNano())
+	}
+}
+
 // kill 恰好执行一次：注销表项、关闭连接、终止派发，并触发下线回调。
 func (cl *client) kill() {
 	cl.deadOnce.Do(func() {
@@ -279,7 +318,11 @@ func (cl *client) writeRaw(msgType websocket.MessageType, data []byte) error {
 	defer cancel()
 	cl.writeMu.Lock()
 	defer cl.writeMu.Unlock()
-	return cl.conn.Write(wctx, msgType, data)
+	err := cl.conn.Write(wctx, msgType, data)
+	if err == nil {
+		cl.lastActive.Store(time.Now().UnixNano())
+	}
+	return err
 }
 
 func writeRaw(conn *websocket.Conn, ctx context.Context, v any) error {

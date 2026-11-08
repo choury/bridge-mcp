@@ -36,7 +36,6 @@ class BridgeConnection(
     class HttpRejected(code: Int, cause: Throwable) : IOException("HTTP($code)", cause)
 
     private val client = OkHttpClient.Builder()
-        .pingInterval(120, TimeUnit.SECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()

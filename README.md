@@ -99,6 +99,8 @@ bin/bridge-provider --server http://bridge-host:8765/ws --id devbox \
 
 文本帧承载 JSON 控制消息，二进制帧承载大块数据。client 连入后 10 秒内必须首发 `hello`；同 id 重复连入被拒绝（`duplicate_client_id`），不影响已有连接。
 
+连接空闲（无请求、无响应、无在途调用）达到 120s 时，server 发 WS ping 并等待 pong（30s），无应答即断开回收。
+
 **文本帧（JSON）**：
 
 ```jsonc

@@ -36,6 +36,8 @@ type Config struct {
 	CallTimeout time.Duration // 单次调用从入队到完成的整体超时
 	MaxBody     int           // 单条 WS 消息上限（字节），双方向都受此约束
 	HelloWait   time.Duration // 连入后等待 hello 的时限
+	IdlePing    time.Duration // 连接静默多久后开始探活
+	PongWait    time.Duration // 单次 ping 等待 pong 的时限
 }
 
 func (c *Config) fillDefaults() {
@@ -47,6 +49,12 @@ func (c *Config) fillDefaults() {
 	}
 	if c.HelloWait <= 0 {
 		c.HelloWait = 10 * time.Second
+	}
+	if c.IdlePing <= 0 {
+		c.IdlePing = 120 * time.Second
+	}
+	if c.PongWait <= 0 {
+		c.PongWait = 30 * time.Second
 	}
 }
 
@@ -179,6 +187,7 @@ func (r *Registry) serveWS(w http.ResponseWriter, req *http.Request) {
 		dispatch: make(chan *pendingCall, 64),
 		dead:     make(chan struct{}),
 	}
+	cl.lastActive.Store(time.Now().UnixNano())
 	if err := r.register(cl); err != nil {
 		_ = writeRaw(conn, baseCtx, protocol.ErrorMsg{
 			Type: protocol.TypeError, Code: protocol.CodeDuplicateClientID, Message: err.Error(),
@@ -201,6 +210,7 @@ func (r *Registry) serveWS(w http.ResponseWriter, req *http.Request) {
 	}
 
 	go cl.worker()
+	go cl.heartbeat()
 	cl.readLoop()
 }
 
