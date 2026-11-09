@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Bridge MCP",
+    "description": "把本机作为 provider 接入 bridge，向 agent 暴露 exec 与文件工具。",
+    "detail": "docs/DETAIL.zh.md"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "name": "@choury/dsh-bridge-mcp",
+  "version": "1.0.0",
+  "description": "DSH plugin that turns this host into a bridge-mcp provider: exec + file primitives over WebSocket, with a settings page.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "bridge-mcp",
+    "mcp",
+    "provider"
+  ],
+  "author": "choury",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/choury/bridge-mcp.git",
+    "directory": "apps/dsh"
+  },
+  "homepage": "https://github.com/choury/bridge-mcp/tree/main/apps/dsh",
+  "bugs": {
+    "url": "https://github.com/choury/bridge-mcp/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./lib/host.js",
+  "exports": {
+    ".": "./lib/host.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.2-rc.1",
+    "node": ">=22.19"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*"
+  },
+  "scripts": {
+    "build": "node src/host/build.mjs && node src/client/build.mjs",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "ws": "^8.18.0"
+  }
+}

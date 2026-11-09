@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Bridge MCP",
+    "description": "Turn this host into a bridge-mcp provider exposing exec and file tools to agents.",
+    "detail": "docs/DETAIL.md"
+  }
+}

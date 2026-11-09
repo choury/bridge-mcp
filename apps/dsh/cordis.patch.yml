@@ -1,0 +1,5 @@
+# Bundle patch layer for @choury/dsh-bridge-mcp.
+# 在 profile 中插入 provider 行；设置页由 dsh.client 声明的客户端 bundle 注入。
+- insert:
+    - id: bridge-mcp
+      name: '@choury/dsh-bridge-mcp'
