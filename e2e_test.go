@@ -198,7 +198,7 @@ func TestBridgeE2E(t *testing.T) {
 		}
 	}
 
-	// 3. bridge.clients 返回 note 与能力
+	// 3. bridge.clients 返回 note、version 与能力
 	clientsRes, err := h.cs.CallTool(h.ctx, &mcp.CallToolParams{Name: "bridge.clients"})
 	if err != nil {
 		t.Fatal(err)
@@ -206,6 +206,9 @@ func TestBridgeE2E(t *testing.T) {
 	clientsJSON := clientsRes.Content[0].(*mcp.TextContent).Text
 	if !bytes.Contains([]byte(clientsJSON), []byte("办公室的 Debian 测试机")) {
 		t.Fatalf("bridge.clients missing note: %s", clientsJSON)
+	}
+	if !bytes.Contains([]byte(clientsJSON), []byte(`"version": "go-provider/`)) {
+		t.Fatalf("bridge.clients missing provider version: %s", clientsJSON)
 	}
 
 	// 4. exec：正常执行、非零退出码、超时、超限截断（保头/tail 保尾）

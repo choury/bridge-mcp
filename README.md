@@ -75,7 +75,7 @@ bin/bridge-provider --server http://bridge-host:8765/ws --id devbox \
 
 **静态工具**（bridge 自有，始终注册；目标不在线或未声明所需原语时调用自然报错）：
 
-- `bridge.clients`：在线 client 清单（id、note、地址、连接时间、能力）。不确定谁在线先调这个。
+- `bridge.clients`：在线 client 清单（id、version、note、地址、连接时间、能力）。不确定谁在线先调这个。
 - `bridge.push {client, local_path, remote_path, offset?}` / `bridge.pull {client, remote_path, local_path, offset?}`：**路径式搬运**。4MiB 二进制块流式传输，bridge 自己读写本机文件，**内容不经过模型上下文，文件大小无上限**。`offset: 0` 全新传输（目标已存在报错）；`offset: N` 续传——接收端要求自己的文件恰好 N 字节，不符即报错。中途失败的错误信息携带 `transferred up to offset N; retry with offset=N to continue`。耗时受 agent 侧 MCP `timeoutMs` 约束。
 
 工具选择的语义分工：
@@ -105,7 +105,7 @@ bin/bridge-provider --server http://bridge-host:8765/ws --id devbox \
 
 ```jsonc
 // client → server
-{"type":"hello","client_id":"devbox","note":"...","auth":"...","capabilities":[
+{"type":"hello","client_id":"devbox","version":"go-provider/1.1.0","note":"...","auth":"...","capabilities":[
   {"name":"exec","description":"...","input_schema":{"type":"object",...}},
   {"name":"file.write_chunk","hidden":true,"input_schema":{...}}
 ]}
@@ -129,6 +129,7 @@ client → server  header = {"type":"result","id":"c1","ok":true,"eof":true,"siz
 规则：
 
 - `client_id`：`^[a-zA-Z0-9_-]{1,32}$`；能力名：`^[a-zA-Z0-9_.-]{1,64}$`；`note` ≤500 字符；同一 hello 内能力名不得重复
+- `version`：provider 实现自报的版本标识（不由用户配置），server 不解释、经 `bridge.clients` 原样返回；取值惯例 `实现名/版本`（如 `go-provider/1.1.0`、`dsh/1.1.0`、`android/1.1.0`），据此区分 client 是哪个实现
 - `input_schema` 必须是 `type:"object"` 的 JSON Schema（缺失 type 时 server 补全；不合法的能力被跳过并记日志，不影响其余能力）
 - `hidden: true` 的能力不注册为模型工具，仅供 bridge 内部调用（分块原语即此用法）
 - 应答类型（JSON 或二进制）由能力自身决定；调用按 id 路由，id 每连接内单调递增

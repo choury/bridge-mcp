@@ -44,6 +44,7 @@ type Capability struct {
 type Hello struct {
 	Type         string       `json:"type"`
 	ClientID     string       `json:"client_id"`
+	Version      string       `json:"version,omitempty"`
 	Note         string       `json:"note,omitempty"`
 	Auth         string       `json:"auth,omitempty"`
 	Capabilities []Capability `json:"capabilities"`

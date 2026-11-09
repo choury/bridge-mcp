@@ -42,7 +42,7 @@ func New(reg *registry.Registry, toolSep string) *Server {
 	}
 	s.mcps.AddTool(&mcp.Tool{
 		Name:        "bridge.clients",
-		Description: "List provider clients currently connected to this bridge. Each entry has the client_id, an optional note (self-description of the client's machine/environment), remote address, connected time, and its capabilities. Call this first to discover which clients are online.",
+		Description: "List provider clients currently connected to this bridge. Each entry has the client_id, a version (self-reported provider implementation identifier), an optional note (self-description of the client's machine/environment), remote address, connected time, and its capabilities. Call this first to discover which clients are online.",
 		InputSchema: json.RawMessage(`{"type":"object"}`),
 	}, s.handleClients)
 

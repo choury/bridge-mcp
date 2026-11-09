@@ -4285,6 +4285,7 @@ var BridgeLink = class {
       const hello = {
         type: "hello",
         client_id: config.clientId,
+        version: "dsh/1.1.0",
         capabilities,
         ...config.note ? { note: config.note } : {},
         ...config.token ? { auth: config.token } : {}

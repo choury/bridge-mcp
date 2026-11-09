@@ -61,6 +61,7 @@ func (c *Config) fillDefaults() {
 // ClientInfo client 的对外快照。
 type ClientInfo struct {
 	ClientID     string                `json:"client_id"`
+	Version      string                `json:"version,omitempty"`
 	Note         string                `json:"note,omitempty"`
 	RemoteAddr   string                `json:"remote_addr"`
 	ConnectedAt  time.Time             `json:"connected_at"`
@@ -180,7 +181,7 @@ func (r *Registry) serveWS(w http.ResponseWriter, req *http.Request) {
 	ctx, cancel := context.WithCancel(baseCtx)
 	cl := &client{
 		reg:      r,
-		info:     ClientInfo{ClientID: hello.ClientID, Note: hello.Note, RemoteAddr: req.RemoteAddr, ConnectedAt: time.Now(), Capabilities: hello.Capabilities},
+		info:     ClientInfo{ClientID: hello.ClientID, Version: hello.Version, Note: hello.Note, RemoteAddr: req.RemoteAddr, ConnectedAt: time.Now(), Capabilities: hello.Capabilities},
 		conn:     conn,
 		ctx:      ctx,
 		cancel:   cancel,

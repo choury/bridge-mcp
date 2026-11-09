@@ -176,6 +176,7 @@ export class BridgeLink {
       const hello = {
         type: 'hello',
         client_id: config.clientId,
+        version: PLUGIN_VERSION,
         capabilities,
         ...(config.note ? { note: config.note } : {}),
         ...(config.token ? { auth: config.token } : {}),

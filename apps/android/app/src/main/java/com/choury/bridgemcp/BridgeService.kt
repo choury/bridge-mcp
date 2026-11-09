@@ -285,7 +285,7 @@ class BridgeService : Service() {
                 val (caps, handlers) = buildRegistry(adbPort)
                 val conn = BridgeConnection(
                     serverUrl = server,
-                    helloMessage = Protocol.hello(clientId, note, token, caps),
+                    helloMessage = Protocol.hello(clientId, "android/${BuildConfig.VERSION_NAME}", note, token, caps),
                     handlers = handlers,
                     onWelcomed = {
                         welcomed = true

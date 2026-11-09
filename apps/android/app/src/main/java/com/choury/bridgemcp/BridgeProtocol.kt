@@ -13,7 +13,7 @@ object Protocol {
     const val TYPE_CALL = "call"
     const val TYPE_RESULT = "result"
 
-    fun hello(clientId: String, note: String, auth: String, capabilities: List<Capability>): JSONObject {
+    fun hello(clientId: String, version: String, note: String, auth: String, capabilities: List<Capability>): JSONObject {
         val caps = JSONArray()
         for (c in capabilities) {
             val o = JSONObject()
@@ -26,6 +26,7 @@ object Protocol {
         return JSONObject()
             .put("type", TYPE_HELLO)
             .put("client_id", clientId)
+            .put("version", version)
             .put("note", note)
             .put("auth", auth)
             .put("capabilities", caps)

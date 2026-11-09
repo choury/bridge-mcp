@@ -31,6 +31,7 @@ const (
 	outputCap    = 32 << 10 // exec 输出捕获上限（stdout/stderr 各自）
 	execMaxWait  = 10 * time.Minute
 	readChunkMax = 8 << 20 // read_chunk 单次读取上限
+	version      = "go-provider/1.1.0"
 )
 
 // capHandler 能力处理器：args 为 JSON 参数，data 为二进制帧载荷（可空）。
@@ -133,7 +134,7 @@ func main() {
 	backoff := time.Second
 	for {
 		welcomed, err := runOnce(ctx, *server, protocol.Hello{
-			Type: protocol.TypeHello, ClientID: *id, Note: *note, Auth: *token, Capabilities: caps,
+			Type: protocol.TypeHello, ClientID: *id, Version: version, Note: *note, Auth: *token, Capabilities: caps,
 		}, handlers)
 		if welcomed {
 			backoff = time.Second

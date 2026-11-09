@@ -1,4 +1,5 @@
 /** 把入口与 ws 打包成零依赖的 lib/host.js。 */
+import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,6 +9,7 @@ import { build } from 'esbuild'
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '../..')
 const outfile = resolve(root, 'lib/host.js')
+const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
 
 await mkdir(dirname(outfile), { recursive: true })
 await build({
@@ -19,6 +21,8 @@ await build({
   target: ['node22'],
   // ws 对这两个原生扩展是可选依赖，运行时用 try/catch 探测，保持外部引用即可
   external: ['bufferutil', 'utf-8-validate'],
+  // hello 自报版本标识（实现名/版本）；用 define 而非 import package.json，避免整份 JSON 内联进产物
+  define: { PLUGIN_VERSION: JSON.stringify(`dsh/${pkg.version}`) },
   legalComments: 'eof',
   banner: {
     js: [
