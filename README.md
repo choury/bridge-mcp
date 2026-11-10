@@ -129,7 +129,7 @@ client → server  header = {"type":"result","id":"c1","ok":true,"eof":true,"siz
 规则：
 
 - `client_id`：`^[a-zA-Z0-9_-]{1,32}$`；能力名：`^[a-zA-Z0-9_.-]{1,64}$`；`note` ≤500 字符；同一 hello 内能力名不得重复
-- `version`：provider 实现自报的版本标识（不由用户配置），server 不解释、经 `bridge.clients` 原样返回；取值惯例 `实现名/版本`（如 `go-provider/1.1.0`、`dsh/1.1.0`、`android/1.1.0`），据此区分 client 是哪个实现
+- `version`：必填。provider 实现自报的版本标识（不由用户配置），server 不解释、经 `bridge.clients` 原样返回；取值惯例 `实现名/版本`（如 `go-provider/1.1.0`、`dsh/1.1.0`、`android/1.1.0`），据此区分 client 是哪个实现
 - `input_schema` 必须是 `type:"object"` 的 JSON Schema（缺失 type 时 server 补全；不合法的能力被跳过并记日志，不影响其余能力）
 - `hidden: true` 的能力不注册为模型工具，仅供 bridge 内部调用（分块原语即此用法）
 - 应答类型（JSON 或二进制）由能力自身决定；调用按 id 路由，id 每连接内单调递增

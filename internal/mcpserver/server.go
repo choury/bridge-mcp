@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -227,12 +228,38 @@ func (s *Server) handleCall(ctx context.Context, clientID, capability string, re
 	return textResult(prettyJSON(raw)), nil
 }
 
+// clientView bridge.clients 的精简视图：能力只留 name，
+// 完整 schema 已可通过 tools/list 获取。
+type clientView struct {
+	ClientID     string    `json:"client_id"`
+	Version      string    `json:"version"`
+	Note         string    `json:"note,omitempty"`
+	RemoteAddr   string    `json:"remote_addr"`
+	ConnectedAt  time.Time `json:"connected_at"`
+	Capabilities []string  `json:"capabilities"`
+}
+
 func (s *Server) handleClients(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	clients := s.reg.Clients()
 	if len(clients) == 0 {
 		return textResult("no provider clients connected"), nil
 	}
-	return textResult(prettyJSON(mustMarshal(clients))), nil
+	out := make([]clientView, len(clients))
+	for i, c := range clients {
+		caps := make([]string, len(c.Capabilities))
+		for j, cap := range c.Capabilities {
+			caps[j] = cap.Name
+		}
+		out[i] = clientView{
+			ClientID:     c.ClientID,
+			Version:      c.Version,
+			Note:         c.Note,
+			RemoteAddr:   c.RemoteAddr,
+			ConnectedAt:  c.ConnectedAt,
+			Capabilities: caps,
+		}
+	}
+	return textResult(prettyJSON(mustMarshal(out))), nil
 }
 
 // transferChunk 分块传输的单块大小；帧上限只需容纳一个块加头部

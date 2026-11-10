@@ -61,7 +61,7 @@ func (c *Config) fillDefaults() {
 // ClientInfo client 的对外快照。
 type ClientInfo struct {
 	ClientID     string                `json:"client_id"`
-	Version      string                `json:"version,omitempty"`
+	Version      string                `json:"version"`
 	Note         string                `json:"note,omitempty"`
 	RemoteAddr   string                `json:"remote_addr"`
 	ConnectedAt  time.Time             `json:"connected_at"`
@@ -236,6 +236,9 @@ func (r *Registry) handshake(conn *websocket.Conn, req *http.Request, baseCtx co
 	}
 	if !clientIDRe.MatchString(hello.ClientID) {
 		return nil, badHandshake("invalid client_id: must match ^[a-zA-Z0-9_-]{1,32}$"), fmt.Errorf("invalid client_id from %s", req.RemoteAddr)
+	}
+	if hello.Version == "" {
+		return nil, badHandshake("missing version"), fmt.Errorf("missing version from %s", req.RemoteAddr)
 	}
 	if len([]rune(hello.Note)) > maxNoteLen {
 		return nil, badHandshake(fmt.Sprintf("note exceeds %d characters", maxNoteLen)), errors.New("note too long")
