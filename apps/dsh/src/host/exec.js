@@ -48,9 +48,9 @@ function createSink(keepTail) {
   }
 }
 
-/** 杀掉整个进程组。 */
+/** 杀掉整个进程组；child 自身已退出时组内可能仍有持有管道的后台孤儿（`xxx &`），仍须击杀。 */
 function killGroup(child) {
-  if (!child || child.exitCode !== null) return
+  if (!child) return
   if (typeof child.pid === 'number' && child.pid > 0) {
     try {
       process.kill(-child.pid, 'SIGKILL')
@@ -59,10 +59,12 @@ function killGroup(child) {
       // 没有独立进程组（或已消失）时退回单进程 kill
     }
   }
-  try {
-    child.kill('SIGKILL')
-  } catch {
-    // 进程已经没了
+  if (child.exitCode === null) {
+    try {
+      child.kill('SIGKILL')
+    } catch {
+      // 进程已经没了
+    }
   }
 }
 
@@ -125,7 +127,7 @@ export async function runExec(args = {}, options = {}) {
 
     timer = setTimeout(() => {
       timedOut = true
-      killGroup(child)
+      teardown()
     }, timeoutMs)
 
     child.stdout?.on('data', chunk => stdout.push(chunk))
@@ -135,7 +137,7 @@ export async function runExec(args = {}, options = {}) {
       const out = stdout.read()
       const err = stderr.read()
       return {
-        exit_code: -1,
+        exit_code: child.exitCode ?? -1,
         timed_out: timedOut,
         stdout: out.text,
         stderr: err.text,
@@ -144,12 +146,14 @@ export async function runExec(args = {}, options = {}) {
     }
 
     /**
-     * 断线/停止：杀掉进程组；再给一个短 grace，防止孙进程逃出进程组
-     * 且继续持有 stdout/stderr，导致 close 永远不来、调用永不收敛。
+     * 断线/超时收敛：杀掉进程组后给一个短 grace，等 close 自然到达；
+     * 孙进程逃出进程组且继续持有 stdout/stderr 时 close 永远不来，
+     * grace 到点销毁流强制收敛。
      */
-    const onAbort = () => {
+    const teardown = () => {
       if (settled) return
       killGroup(child)
+      if (graceTimer) return
       graceTimer = setTimeout(() => {
         if (settled) return
         settled = true
@@ -168,6 +172,8 @@ export async function runExec(args = {}, options = {}) {
       }, 2000)
       graceTimer.unref?.()
     }
+
+    const onAbort = () => teardown()
 
     child.on('error', cause => {
       if (settled) return

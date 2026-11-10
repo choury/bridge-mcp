@@ -31,7 +31,7 @@ const (
 	outputCap    = 32 << 10 // exec 输出捕获上限（stdout/stderr 各自）
 	execMaxWait  = 10 * time.Minute
 	readChunkMax = 8 << 20 // read_chunk 单次读取上限
-	version      = "go-provider/1.1.0"
+	version      = "go-provider/1.1.1"
 )
 
 // capHandler 能力处理器：args 为 JSON 参数，data 为二进制帧载荷（可空）。
@@ -307,6 +307,16 @@ func runExec(ctx context.Context, raw json.RawMessage) (any, error) {
 		}
 		return os.ErrProcessDone
 	}
+	// Cancel 只在直接子进程存活期间被 exec 调用：shell 被 `xxx &` 提前结束并留下
+	// 持有管道的孤儿时 Cancel 永不触发，Wait 挂到孤儿自然退出，须到点自行杀组
+	stopKill := context.AfterFunc(ectx, func() {
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+	})
+	defer stopKill()
+	// setsid 等逃出进程组的孤孙杀不到且持着管道，WaitDelay 到点强制关管道收敛
+	cmd.WaitDelay = timeout
 	stdout, stderr := &cappedBuffer{max: outputCap, tail: args.Tail}, &cappedBuffer{max: outputCap, tail: args.Tail}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	runErr := cmd.Run()
@@ -317,20 +327,24 @@ func runExec(ctx context.Context, raw json.RawMessage) (any, error) {
 	}
 	return map[string]any{
 		"exit_code": exitCode,
-		"timed_out": ectx.Err() == context.DeadlineExceeded,
+		"timed_out": ectx.Err() == context.DeadlineExceeded || errors.Is(runErr, exec.ErrWaitDelay),
 		"stdout":    stdout.String(),
 		"stderr":    stderr.String(),
 		"truncated": stdout.truncated || stderr.truncated,
 	}, spawnErr(runErr)
 }
 
-// spawnErr 把"命令以非零码退出"从错误中剔除（这属于正常结果），只保留启动失败类错误。
+// spawnErr 把"命令以非零码退出"从错误中剔除（这属于正常结果），只保留启动失败类错误；
+// ErrWaitDelay 是超时强制收敛而非失败，结果里以 timed_out 呈现。
 func spawnErr(err error) error {
 	if err == nil {
 		return nil
 	}
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
+		return nil
+	}
+	if errors.Is(err, exec.ErrWaitDelay) {
 		return nil
 	}
 	return err

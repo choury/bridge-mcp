@@ -14,8 +14,8 @@ android {
         applicationId = "com.choury.bridgemcp"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1100
-        versionName = "1.1.0"
+        versionCode = 1101
+        versionName = "1.1.1"
     }
 
     signingConfigs {

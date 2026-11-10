@@ -204,8 +204,8 @@ object AdbClient {
                     }
                 }
             } catch (e: SocketTimeoutException) {
+                // 已收到的 V2_EXIT 退出码保留（shell 可能早于超时退出），未收到则维持 -1
                 timedOut = true
-                exitCode = -1
             } finally {
                 close()
             }
