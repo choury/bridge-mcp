@@ -9,7 +9,7 @@ const CLIENT_ID_RE = /^[a-zA-Z0-9_-]{1,32}$/
 const MAX_NOTE = 500
 const MAX_LOGS = 300
 
-/** 默认 client id：主机名原值。 */
+/** 默认 client id：主机名原值；不合法时由 normalizeConfig 报错，交由用户修改。 */
 function defaultClientId(name = hostname()) {
   const value = String(name).trim()
   return value === '' ? 'dsh-host' : value

@@ -1,12 +1,82 @@
 /**
- * exec：login shell 执行，超时杀进程组，输出各截 32KB（缺省 30s，1s–10min）。
+ * exec：按平台选 shell 执行，超时杀整个进程组/进程树，输出各截 32KB（缺省 30s，1s–10min）。
  */
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
+import { basename } from 'node:path'
 
 const MAX_STREAM = 32 * 1024
 
-const SHELL = ['/bin/bash', '/usr/bin/bash', '/bin/sh'].find(candidate => existsSync(candidate)) || '/bin/sh'
+const IS_WIN = process.platform === 'win32'
+
+function selectShell() {
+  if (!IS_WIN) {
+    const file = ['/bin/bash', '/usr/bin/bash', '/bin/sh'].find(candidate => existsSync(candidate)) || '/bin/sh'
+    return { file, args: ['-lc'], label: `${basename(file)} -lc (login shell)` }
+  }
+  return {
+    file: process.env.ComSpec || 'cmd.exe',
+    args: ['/d', '/s', '/c'],
+    // cmd /c 对以引号开头且多于两个引号的命令会剥掉首尾引号，`"C:\Program Files\x.exe" a "b"` 被拆坏；call 前缀规避
+    transform: command => (command.startsWith('"') ? `call ${command}` : command),
+    // cmd 的 &、>、| 不能被 Node 当普通参数转义，必须原样拼接
+    verbatim: true,
+    label: 'cmd.exe (Windows cmd syntax)',
+  }
+}
+
+const SHELL = selectShell()
+
+/** 能力描述用：告知 agent 实际面对的 shell 与语法。 */
+export const SHELL_LABEL = SHELL.label
+
+const STRICT_UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+
+let oemDecoder
+/** cmd 内建命令往管道写的是 OEM 代码页（chcp 改不了）；映射到 TextDecoder 标签，探测失败返回 null。 */
+function getOemDecoder() {
+  if (oemDecoder !== undefined) return oemDecoder
+  oemDecoder = null
+  if (IS_WIN) {
+    try {
+      const probe = spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/c', 'chcp'], { timeout: 3000, windowsHide: true })
+      // 输出本身是 OEM 编码，但代码页编号是 ASCII，用 latin1 取数字即可
+      const match = /(\d+)\s*$/m.exec(probe.stdout.toString('latin1'))
+      const labels = { 866: 'ibm866', 874: 'windows-874', 932: 'shift_jis', 936: 'gb18030', 949: 'euc-kr', 950: 'big5' }
+      const label = match && labels[Number(match[1])]
+      if (label) oemDecoder = new TextDecoder(label)
+    } catch {
+      // 探测失败就按 UTF-8 容错解码
+    }
+  }
+  return oemDecoder
+}
+
+/** 剥掉截断制造的不完整序列：开头的孤儿续字节（≤3）、结尾缺字节的起始序列；否则合法 UTF-8 流会被误判成 OEM。 */
+function trimCharBoundary(buffer) {
+  let start = 0
+  let end = buffer.length
+  while (start < 3 && start < end && (buffer[start] & 0xc0) === 0x80) start++
+  for (let i = 1; i <= 3 && i <= end - start; i++) {
+    const byte = buffer[end - i]
+    if ((byte & 0xc0) === 0x80) continue
+    const need = byte >= 0xf0 ? 4 : byte >= 0xe0 ? 3 : byte >= 0xc0 ? 2 : 1
+    if (i < need) end -= i
+    break
+  }
+  return buffer.subarray(start, end)
+}
+
+/** 输出解码：现代工具走管道就是 UTF-8，先严格解；解不动说明是遗留工具的 OEM 字节，退 OEM。 */
+function decodeOutput(buffer) {
+  const trimmed = trimCharBoundary(buffer)
+  try {
+    return STRICT_UTF8.decode(trimmed)
+  } catch {
+    const fallback = getOemDecoder()
+    return fallback ? fallback.decode(trimmed) : trimmed.toString('utf8')
+  }
+}
 
 /** 按保头/保尾累积一条流，并记录是否截断。 */
 function createSink(keepTail) {
@@ -41,16 +111,24 @@ function createSink(keepTail) {
     },
     read() {
       return {
-        text: Buffer.concat(chunks).toString('utf8'),
+        text: decodeOutput(Buffer.concat(chunks)),
         truncated: total > kept,
       }
     },
   }
 }
 
-/** 杀掉整个进程组；child 自身已退出时组内可能仍有持有管道的后台孤儿（`xxx &`），仍须击杀。 */
+/** 杀掉整个进程组/进程树；child 自身已退出时组内可能仍有持有管道的后台孤儿（`xxx &`），仍须击杀。 */
 function killGroup(child) {
   if (!child) return
+  if (IS_WIN) {
+    // Windows 没有进程组，taskkill /T 按进程树击杀；root 已死则无法遍历树，孤儿由 grace timer 收敛
+    if (typeof child.pid === 'number' && child.pid > 0 && child.exitCode === null) {
+      // error 必须消费：未监听的 spawn error 会抛 uncaughtException
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }).on('error', () => {})
+    }
+    return
+  }
   if (typeof child.pid === 'number' && child.pid > 0) {
     try {
       process.kill(-child.pid, 'SIGKILL')
@@ -99,14 +177,16 @@ export async function runExec(args = {}, options = {}) {
   return await new Promise((resolve, reject) => {
     let child
     try {
-      child = spawn(SHELL, ['-lc', command], {
+      child = spawn(SHELL.file, [...SHELL.args, SHELL.transform ? SHELL.transform(command) : command], {
         cwd,
-        detached: process.platform !== 'win32',
+        detached: !IS_WIN,
         env: process.env,
         stdio: ['ignore', 'pipe', 'pipe'],
+        ...(SHELL.verbatim ? { windowsVerbatimArguments: true } : {}),
+        ...(IS_WIN ? { windowsHide: true } : {}),
       })
     } catch (cause) {
-      reject(new Error(`failed to start ${SHELL}: ${cause.message}`))
+      reject(new Error(`failed to start ${SHELL.file}: ${cause.message}`))
       return
     }
 

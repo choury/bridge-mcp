@@ -11,8 +11,10 @@ Agent ──MCP──> bridge ──WebSocket──> 本插件（host 执行能�
 
 - 能力声明与 go 的 provider 参考实现一致（只声明原语，`file.push`/`file.pull` 由 bridge 合成）。
 - 地址支持 `http(s)://` 与 `ws(s)://`；地址里的 `user:pass@` 转成 `Authorization: Basic`。
-- 断线 / 停止会中止在途调用并杀掉 `exec` 进程组；重连后旧连接上的结果直接丢弃，绝不串到新连接。
-- 配置与日志在 `$DSH_HOME/bridge-mcp/`（目录 0700、文件 0600），Token 明文保存。
+- 断线 / 停止会中止在途调用并杀掉 `exec` 进程组（Windows 为进程树，`taskkill /T /F`）；重连后旧连接上的结果直接丢弃，绝不串到新连接。
+- exec 按平台选 shell：类 Unix 用 `bash -lc`（无 bash 时 `/bin/sh`）；Windows 用 `cmd.exe`（实际 shell 写进工具描述，agent 据此生成对应语法）。Windows 输出先按严格 UTF-8 解码，失败退系统 OEM 代码页（如 GBK）；同一输出内混合两种编码时占少数的一段会乱码；以引号开头的命令自动加 `call` 前缀，规避 `cmd /c` 的剥引号规则。`file.replace` 是字节级匹配，CRLF 文件的 `old` 需带 `\r\n`。
+- 默认 client id 取主机名原值；含非法字符（如中文 Windows 主机名）时设置页报错，由用户自行修改，不做自动改写。
+- 配置与日志在 `$DSH_HOME/bridge-mcp/`（目录 0700、文件 0600），Token 明文保存；Windows 上 POSIX 权限位无效。
 
 ## 设置页
 

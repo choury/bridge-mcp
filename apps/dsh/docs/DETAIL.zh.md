@@ -10,7 +10,7 @@
 
 ## 能力
 
-- `exec`：login shell 执行，超时/断线/停止杀进程组，输出各截断 32KB
+- `exec`：login shell 执行（Windows 为 cmd.exe；输出按 UTF-8 严格解码、失败退 OEM 代码页），超时/断线/停止杀进程组（Windows 为进程树），输出各截断 32KB
 - 文件：`file.replace` + 分块原语（`file.push` / `file.pull` 由 bridge 合成）
 
 配置与日志在 `~/.dsh/bridge-mcp/`。协议、覆盖规则与安全说明见仓库 README。

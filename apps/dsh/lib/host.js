@@ -3758,10 +3758,67 @@ var import_websocket_server = __toESM(require_websocket_server(), 1);
 var wrapper_default = import_websocket.default;
 
 // src/host/exec.js
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
+import { basename } from "node:path";
 var MAX_STREAM = 32 * 1024;
-var SHELL = ["/bin/bash", "/usr/bin/bash", "/bin/sh"].find((candidate) => existsSync(candidate)) || "/bin/sh";
+var IS_WIN = process.platform === "win32";
+function selectShell() {
+  if (!IS_WIN) {
+    const file = ["/bin/bash", "/usr/bin/bash", "/bin/sh"].find((candidate) => existsSync(candidate)) || "/bin/sh";
+    return { file, args: ["-lc"], label: `${basename(file)} -lc (login shell)` };
+  }
+  return {
+    file: process.env.ComSpec || "cmd.exe",
+    args: ["/d", "/s", "/c"],
+    // cmd /c 对以引号开头且多于两个引号的命令会剥掉首尾引号，`"C:\Program Files\x.exe" a "b"` 被拆坏；call 前缀规避
+    transform: (command) => command.startsWith('"') ? `call ${command}` : command,
+    // cmd 的 &、>、| 不能被 Node 当普通参数转义，必须原样拼接
+    verbatim: true,
+    label: "cmd.exe (Windows cmd syntax)"
+  };
+}
+var SHELL = selectShell();
+var SHELL_LABEL = SHELL.label;
+var STRICT_UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+var oemDecoder;
+function getOemDecoder() {
+  if (oemDecoder !== void 0) return oemDecoder;
+  oemDecoder = null;
+  if (IS_WIN) {
+    try {
+      const probe = spawnSync(process.env.ComSpec || "cmd.exe", ["/d", "/c", "chcp"], { timeout: 3e3, windowsHide: true });
+      const match = /(\d+)\s*$/m.exec(probe.stdout.toString("latin1"));
+      const labels = { 866: "ibm866", 874: "windows-874", 932: "shift_jis", 936: "gb18030", 949: "euc-kr", 950: "big5" };
+      const label = match && labels[Number(match[1])];
+      if (label) oemDecoder = new TextDecoder(label);
+    } catch {
+    }
+  }
+  return oemDecoder;
+}
+function trimCharBoundary(buffer) {
+  let start = 0;
+  let end = buffer.length;
+  while (start < 3 && start < end && (buffer[start] & 192) === 128) start++;
+  for (let i = 1; i <= 3 && i <= end - start; i++) {
+    const byte = buffer[end - i];
+    if ((byte & 192) === 128) continue;
+    const need = byte >= 240 ? 4 : byte >= 224 ? 3 : byte >= 192 ? 2 : 1;
+    if (i < need) end -= i;
+    break;
+  }
+  return buffer.subarray(start, end);
+}
+function decodeOutput(buffer) {
+  const trimmed = trimCharBoundary(buffer);
+  try {
+    return STRICT_UTF8.decode(trimmed);
+  } catch {
+    const fallback = getOemDecoder();
+    return fallback ? fallback.decode(trimmed) : trimmed.toString("utf8");
+  }
+}
 function createSink(keepTail) {
   let chunks = [];
   let kept = 0;
@@ -3793,14 +3850,21 @@ function createSink(keepTail) {
     },
     read() {
       return {
-        text: Buffer.concat(chunks).toString("utf8"),
+        text: decodeOutput(Buffer.concat(chunks)),
         truncated: total > kept
       };
     }
   };
 }
 function killGroup(child) {
-  if (!child || child.exitCode !== null) return;
+  if (!child) return;
+  if (IS_WIN) {
+    if (typeof child.pid === "number" && child.pid > 0 && child.exitCode === null) {
+      spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }).on("error", () => {
+      });
+    }
+    return;
+  }
   if (typeof child.pid === "number" && child.pid > 0) {
     try {
       process.kill(-child.pid, "SIGKILL");
@@ -3808,9 +3872,11 @@ function killGroup(child) {
     } catch {
     }
   }
-  try {
-    child.kill("SIGKILL");
-  } catch {
+  if (child.exitCode === null) {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+    }
   }
 }
 async function runExec(args = {}, options = {}) {
@@ -3839,14 +3905,16 @@ async function runExec(args = {}, options = {}) {
   return await new Promise((resolve, reject) => {
     let child;
     try {
-      child = spawn(SHELL, ["-lc", command], {
+      child = spawn(SHELL.file, [...SHELL.args, SHELL.transform ? SHELL.transform(command) : command], {
         cwd,
-        detached: process.platform !== "win32",
+        detached: !IS_WIN,
         env: process.env,
-        stdio: ["ignore", "pipe", "pipe"]
+        stdio: ["ignore", "pipe", "pipe"],
+        ...SHELL.verbatim ? { windowsVerbatimArguments: true } : {},
+        ...IS_WIN ? { windowsHide: true } : {}
       });
     } catch (cause) {
-      reject(new Error(`failed to start ${SHELL}: ${cause.message}`));
+      reject(new Error(`failed to start ${SHELL.file}: ${cause.message}`));
       return;
     }
     const stdout = createSink(keepTail);
@@ -3862,7 +3930,7 @@ async function runExec(args = {}, options = {}) {
     }
     timer = setTimeout(() => {
       timedOut = true;
-      killGroup(child);
+      teardown();
     }, timeoutMs);
     child.stdout?.on("data", (chunk) => stdout.push(chunk));
     child.stderr?.on("data", (chunk) => stderr.push(chunk));
@@ -3870,16 +3938,17 @@ async function runExec(args = {}, options = {}) {
       const out = stdout.read();
       const err = stderr.read();
       return {
-        exit_code: -1,
+        exit_code: child.exitCode ?? -1,
         timed_out: timedOut,
         stdout: out.text,
         stderr: err.text,
         truncated: out.truncated || err.truncated
       };
     };
-    const onAbort = () => {
+    const teardown = () => {
       if (settled) return;
       killGroup(child);
+      if (graceTimer) return;
       graceTimer = setTimeout(() => {
         if (settled) return;
         settled = true;
@@ -3896,6 +3965,7 @@ async function runExec(args = {}, options = {}) {
       }, 2e3);
       graceTimer.unref?.();
     };
+    const onAbort = () => teardown();
     child.on("error", (cause) => {
       if (settled) return;
       settled = true;
@@ -3923,7 +3993,7 @@ async function runExec(args = {}, options = {}) {
 
 // src/host/files.js
 import { promises as fsp } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename as basename2, dirname, join } from "node:path";
 import { randomBytes } from "node:crypto";
 var MAX_CHUNK = 8 * 1024 * 1024;
 function requirePath(value) {
@@ -3985,7 +4055,7 @@ async function writeChunk(args = {}, data) {
   return { bytes_written: payload.length };
 }
 async function atomicWrite(path, text, mode) {
-  const temp = join(dirname(path), `.${basename(path)}.replace-${randomBytes(6).toString("hex")}`);
+  const temp = join(dirname(path), `.${basename2(path)}.replace-${randomBytes(6).toString("hex")}`);
   const targetMode = mode & 4095;
   try {
     await fsp.writeFile(temp, text, { mode: targetMode });
@@ -4035,13 +4105,13 @@ async function replaceText(args = {}) {
 // src/host/capabilities.js
 var execCapability = {
   name: "exec",
-  description: "Run a shell command on this DSH host via bash -lc (login shell). Returns exit code, stdout, stderr and truncation flags. stdout/stderr are each capped at 32KB (head by default; tail:true keeps the tail).",
+  description: `Run a shell command on this DSH host via ${SHELL_LABEL}. Returns exit code, stdout, stderr and truncation flags. stdout/stderr are each capped at 32KB (head by default; tail:true keeps the tail).`,
   input_schema: {
     type: "object",
     properties: {
       command: { type: "string", description: "shell command to run" },
       workdir: { type: "string", description: "working directory; must exist" },
-      timeout_ms: { type: "integer", minimum: 1e3, maximum: 6e5, default: 3e4, description: "kill the whole process group after this many milliseconds" },
+      timeout_ms: { type: "integer", minimum: 1e3, maximum: 6e5, default: 3e4, description: "kill the whole process group/tree after this many milliseconds" },
       tail: { type: "boolean", default: false, description: "keep the last 32KB instead of the first 32KB of each stream" }
     },
     required: ["command"]
@@ -4049,7 +4119,7 @@ var execCapability = {
 };
 var replaceCapability = {
   name: "file.replace",
-  description: "Replace one exact occurrence of old text with new text in a UTF-8 file (atomic write). Errors when old is missing, matches several places (unless all:true), or the file is not UTF-8.",
+  description: "Replace one exact occurrence of old text with new text in a UTF-8 file (atomic write). The match is byte-exact, so mind CRLF line endings on Windows. Errors when old is missing, matches several places (unless all:true), or the file is not UTF-8.",
   input_schema: {
     type: "object",
     properties: {
@@ -4285,7 +4355,7 @@ var BridgeLink = class {
       const hello = {
         type: "hello",
         client_id: config.clientId,
-        version: "dsh/1.1.0",
+        version: "dsh/1.1.1",
         capabilities,
         ...config.note ? { note: config.note } : {},
         ...config.token ? { auth: config.token } : {}

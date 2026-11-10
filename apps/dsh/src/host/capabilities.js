@@ -1,18 +1,18 @@
 /**
  * 能力声明与分发；只声明原语，file.push/file.pull 由 bridge 合成。
  */
-import { runExec } from './exec.js'
+import { SHELL_LABEL, runExec } from './exec.js'
 import { readChunk, replaceText, writeChunk } from './files.js'
 
 const execCapability = {
   name: 'exec',
-  description: 'Run a shell command on this DSH host via bash -lc (login shell). Returns exit code, stdout, stderr and truncation flags. stdout/stderr are each capped at 32KB (head by default; tail:true keeps the tail).',
+  description: `Run a shell command on this DSH host via ${SHELL_LABEL}. Returns exit code, stdout, stderr and truncation flags. stdout/stderr are each capped at 32KB (head by default; tail:true keeps the tail).`,
   input_schema: {
     type: 'object',
     properties: {
       command: { type: 'string', description: 'shell command to run' },
       workdir: { type: 'string', description: 'working directory; must exist' },
-      timeout_ms: { type: 'integer', minimum: 1000, maximum: 600000, default: 30000, description: 'kill the whole process group after this many milliseconds' },
+      timeout_ms: { type: 'integer', minimum: 1000, maximum: 600000, default: 30000, description: 'kill the whole process group/tree after this many milliseconds' },
       tail: { type: 'boolean', default: false, description: 'keep the last 32KB instead of the first 32KB of each stream' },
     },
     required: ['command'],
@@ -21,7 +21,7 @@ const execCapability = {
 
 const replaceCapability = {
   name: 'file.replace',
-  description: 'Replace one exact occurrence of old text with new text in a UTF-8 file (atomic write). Errors when old is missing, matches several places (unless all:true), or the file is not UTF-8.',
+  description: 'Replace one exact occurrence of old text with new text in a UTF-8 file (atomic write). The match is byte-exact, so mind CRLF line endings on Windows. Errors when old is missing, matches several places (unless all:true), or the file is not UTF-8.',
   input_schema: {
     type: 'object',
     properties: {

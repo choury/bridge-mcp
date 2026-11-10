@@ -10,7 +10,7 @@ Turns this host into a [bridge-mcp](https://github.com/choury/bridge-mcp) provid
 
 ## Capabilities
 
-- `exec`: login shell, process-group kill on timeout/disconnect/stop, 32KB cap per stream
+- `exec`: login shell (cmd.exe on Windows; output decoded as strict UTF-8 with fallback to the legacy OEM codepage), process-group kill on timeout/disconnect/stop (process tree via taskkill on Windows), 32KB cap per stream
 - Files: `file.replace` plus chunk primitives (`file.push` / `file.pull` are synthesized by bridge)
 
 Configuration and logs live in `~/.dsh/bridge-mcp/`. See the repository README for protocol, overwrite rules and security.
